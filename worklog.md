@@ -104,3 +104,47 @@ Key Changes:
 2. Automatic retry with exponential backoff for transient network failures
 3. Race condition prevention in auth state listeners
 4. Visual indicators for network status
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Redesign Menu Pages to ZCOFFEE Style
+
+Work Log:
+- Redesigned /src/app/r/[slug]/page.tsx (main menu page)
+  - Removed all images - clean text-only design
+  - Added French/Arabic language toggle
+  - Applied Playfair Display serif font for headers
+  - Applied Plus Jakarta Sans for body text
+  - Light background (#faf9f6) with accent color (#b48c68)
+  - Glass-style sticky navigation
+  - Clean category cards with gradient separators
+  - Item rows with price on right side
+  - Shimmer loading animation
+  - Sticky cart bar with item count
+- Redesigned /src/app/r/[slug]/t/[tableId]/page.tsx (table ordering page)
+  - Same clean ZCOFFEE style
+  - Language toggle support
+  - Category tabs for filtering
+  - Quantity controls (+/-) per item
+  - RTL support for Arabic
+- Updated /src/components/ui/menu-skeleton.tsx
+  - New shimmer loading design matching ZCOFFEE style
+  - No images, clean skeleton cards
+
+Stage Summary:
+- Menu pages now match ZCOFFEE design aesthetic
+- Clean, elegant typography with serif headers
+- Full bilingual support (French/Arabic)
+- RTL layout support for Arabic
+- Light, airy color palette
+- No images - pure text-based menu
+- Mobile-first responsive design
+
+Key Design Elements:
+1. Colors: bg=#faf9f6, accent=#b48c68, text=#2d2a26
+2. Fonts: Playfair Display (serif), Plus Jakarta Sans (body)
+3. Glass navigation with backdrop blur
+4. Category cards with gradient separators
+5. Shimmer loading animations
+6. Language toggle (FR/AR) with RTL support

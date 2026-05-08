@@ -1,32 +1,36 @@
 'use client';
 
-import { Skeleton } from '@/components/ui/skeleton';
+// Shimmer loading component for ZCOFFEE-style menu
+function ShimmerLine({ className = '' }: { className?: string }) {
+  return (
+    <div 
+      className={`bg-gradient-to-r from-gray-100 via-gray-50 to-gray-100 rounded-md animate-pulse ${className}`}
+      style={{
+        backgroundSize: '200% 100%',
+        animation: 'shimmer 2.5s infinite linear'
+      }}
+    />
+  );
+}
 
 export function MenuSkeleton() {
   return (
-    <div className="min-h-screen bg-background font-body pb-24">
+    <div className="min-h-screen bg-[#faf9f6] pb-20">
       {/* Header Skeleton */}
-      <header className="flex justify-between items-center px-6 py-4 sticky top-0 bg-surface shadow-card z-40">
-        <Skeleton className="h-8 w-32 rounded-lg" />
-        <Skeleton className="h-10 w-24 rounded-full" />
-      </header>
-
-      {/* Hero Skeleton */}
-      <section className="px-6 pt-6 pb-4">
-        <Skeleton className="h-10 w-48 mb-2 rounded-lg" />
-        <Skeleton className="h-6 w-72 rounded-lg" />
-      </section>
-
-      {/* Category Tabs Skeleton */}
-      <nav className="sticky top-[72px] z-30 bg-surface/90 backdrop-blur-md overflow-x-auto hide-scrollbar flex items-center gap-4 px-6 py-4">
-        {[1, 2, 3, 4].map((i) => (
-          <Skeleton key={i} className="h-10 w-24 rounded-full shrink-0" />
-        ))}
+      <nav className="sticky top-0 z-50 px-6 py-4 flex justify-center items-center bg-[#faf9f6]/90 backdrop-blur-xl border-b border-[#b48c68]/10">
+        <div className="flex flex-col items-center">
+          <div className="w-10 h-10 bg-[#2d2a26] rounded-xl mb-1" />
+          <ShimmerLine className="h-5 w-24 mb-1" />
+          <ShimmerLine className="h-2 w-20" />
+        </div>
+        <div className="absolute right-6">
+          <ShimmerLine className="h-7 w-14 rounded-full" />
+        </div>
       </nav>
 
-      {/* Menu Grid Skeleton */}
-      <main className="px-6 mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
-        {[1, 2, 3, 4, 5, 6].map((i) => (
+      {/* Menu Cards Skeleton */}
+      <main className="max-w-xl mx-auto px-5 py-6 space-y-6">
+        {[1, 2, 3].map((i) => (
           <MenuCardSkeleton key={i} />
         ))}
       </main>
@@ -36,36 +40,31 @@ export function MenuSkeleton() {
 
 export function MenuCardSkeleton() {
   return (
-    <article className="bg-white rounded-3xl overflow-hidden shadow-card border border-surface-container">
-      {/* Image Skeleton */}
-      <Skeleton className="h-48 w-full rounded-none" />
-      
-      {/* Content Skeleton */}
-      <div className="p-6 flex flex-col gap-3">
-        <div className="flex justify-between items-start">
-          <Skeleton className="h-6 w-32 rounded-lg" />
-          <Skeleton className="h-6 w-16 rounded-lg" />
-        </div>
-        <Skeleton className="h-4 w-full rounded-lg" />
-        <Skeleton className="h-4 w-3/4 rounded-lg" />
-        
-        <div className="flex justify-between items-center mt-2">
-          <div className="flex gap-2">
-            <Skeleton className="h-6 w-16 rounded-full" />
-            <Skeleton className="h-6 w-12 rounded-full" />
-          </div>
-          <Skeleton className="h-10 w-10 rounded-full" />
-        </div>
+    <div className="bg-white rounded-3xl p-6 shadow-sm border border-black/[0.03]">
+      {/* Category Header */}
+      <div className="flex items-center gap-4 mb-5">
+        <ShimmerLine className="h-5 w-24" />
+        <div className="flex-1 h-px bg-gradient-to-r from-gray-200 to-transparent" />
       </div>
-    </article>
+      
+      {/* Items */}
+      <div className="space-y-4">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="flex justify-between items-center py-2">
+            <ShimmerLine className="h-4 w-40" />
+            <ShimmerLine className="h-4 w-12" />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
 export function CategoryTabsSkeleton() {
   return (
-    <nav className="sticky top-[72px] z-30 bg-surface/90 backdrop-blur-md overflow-x-auto hide-scrollbar flex items-center gap-4 px-6 py-4">
+    <nav className="sticky top-[72px] z-30 bg-[#faf9f6]/90 backdrop-blur-md overflow-x-auto flex items-center gap-4 px-6 py-4">
       {[1, 2, 3, 4].map((i) => (
-        <Skeleton key={i} className="h-10 w-24 rounded-full shrink-0" />
+        <ShimmerLine key={i} className="h-8 w-20 rounded-full shrink-0" />
       ))}
     </nav>
   );
@@ -73,18 +72,21 @@ export function CategoryTabsSkeleton() {
 
 export function HeroSkeleton() {
   return (
-    <section className="px-6 pt-6 pb-4">
-      <Skeleton className="h-10 w-48 mb-2 rounded-lg" />
-      <Skeleton className="h-6 w-72 rounded-lg" />
+    <section className="px-6 pt-6 pb-4 text-center">
+      <ShimmerLine className="h-8 w-32 mx-auto mb-2" />
+      <ShimmerLine className="h-4 w-48 mx-auto" />
     </section>
   );
 }
 
 export function HeaderSkeleton() {
   return (
-    <header className="flex justify-between items-center px-6 py-4 sticky top-0 bg-surface shadow-card z-40">
-      <Skeleton className="h-8 w-32 rounded-lg" />
-      <Skeleton className="h-10 w-24 rounded-full" />
-    </header>
+    <nav className="sticky top-0 z-50 px-6 py-4 flex justify-center items-center bg-[#faf9f6]/90 backdrop-blur-xl">
+      <div className="flex flex-col items-center">
+        <div className="w-10 h-10 bg-[#2d2a26] rounded-xl mb-1" />
+        <ShimmerLine className="h-5 w-24 mb-1" />
+        <ShimmerLine className="h-2 w-16" />
+      </div>
+    </nav>
   );
 }
