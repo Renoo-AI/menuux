@@ -14,8 +14,20 @@ import {
   History,
   ChefHat,
   Star,
-  Users
+  Users,
+  Gift,
+  Grid3X3,
+  Sparkles,
+  Clock,
+  MoreHorizontal
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Button } from '@/components/ui/button';
 
 interface NavItem {
   href: string;
@@ -33,8 +45,19 @@ const publicNavItems: NavItem[] = [
 const dashboardNavItems: NavItem[] = [
   { href: '/dashboard', label: 'Home', icon: <Home className="w-6 h-6" /> },
   { href: '/dashboard/kitchen', label: 'Kitchen', icon: <ChefHat className="w-6 h-6" /> },
-  { href: '/dashboard/staff', label: 'Staff', icon: <Users className="w-6 h-6" /> },
-  { href: '/dashboard/feedback', label: 'Reviews', icon: <Star className="w-6 h-6" /> },
+  { href: '/dashboard/floor-plan', label: 'Floor', icon: <Grid3X3 className="w-6 h-6" /> },
+  { href: '/dashboard/promotions', label: 'Promos', icon: <Gift className="w-6 h-6" /> },
+];
+
+const moreNavItems: NavItem[] = [
+  { href: '/dashboard/history', label: 'History', icon: <History className="w-5 h-5" /> },
+  { href: '/dashboard/menu', label: 'Menu', icon: <BookOpen className="w-5 h-5" /> },
+  { href: '/dashboard/specials', label: 'Specials', icon: <Sparkles className="w-5 h-5" /> },
+  { href: '/dashboard/tables', label: 'Tables', icon: <Utensils className="w-5 h-5" /> },
+  { href: '/dashboard/waitlist', label: 'Waitlist', icon: <Clock className="w-5 h-5" /> },
+  { href: '/dashboard/staff', label: 'Staff', icon: <Users className="w-5 h-5" /> },
+  { href: '/dashboard/feedback', label: 'Reviews', icon: <Star className="w-5 h-5" /> },
+  { href: '/dashboard/logs', label: 'Activity', icon: <Receipt className="w-5 h-5" /> },
 ];
 
 interface BottomNavBarProps {
@@ -72,6 +95,36 @@ export function BottomNavBar({ variant = 'public' }: BottomNavBarProps) {
           </Link>
         );
       })}
+      
+      {variant === 'dashboard' && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="flex flex-col items-center justify-center p-2 text-on-surface-variant hover:text-primary transition-all">
+              <MoreHorizontal className="w-6 h-6" />
+              <span className="font-label-caps text-label-caps mt-1">More</span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48 mb-2">
+            {moreNavItems.map((item) => {
+              const isActive = pathname === item.href || pathname.startsWith(item.href);
+              return (
+                <DropdownMenuItem key={item.href} asChild>
+                  <Link
+                    href={item.href}
+                    className={cn(
+                      'flex items-center gap-3 cursor-pointer',
+                      isActive ? 'text-primary' : ''
+                    )}
+                  >
+                    {item.icon}
+                    {item.label}
+                  </Link>
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </nav>
   );
 }

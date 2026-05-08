@@ -3,11 +3,11 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { 
-  LayoutDashboard, 
-  UtensilsCrossed, 
-  BookOpen, 
-  ClipboardList, 
+import {
+  LayoutDashboard,
+  UtensilsCrossed,
+  BookOpen,
+  ClipboardList,
   Settings,
   HelpCircle,
   LogOut,
@@ -16,7 +16,11 @@ import {
   Receipt,
   ChefHat,
   Star,
-  Users
+  Users,
+  Gift,
+  Grid3X3,
+  Sparkles,
+  Clock
 } from 'lucide-react';
 
 interface NavItem {
@@ -28,9 +32,13 @@ interface NavItem {
 const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
   { href: '/dashboard/kitchen', label: 'Kitchen', icon: <ChefHat className="w-5 h-5" /> },
+  { href: '/dashboard/floor-plan', label: 'Floor Plan', icon: <Grid3X3 className="w-5 h-5" /> },
   { href: '/dashboard/history', label: 'History', icon: <History className="w-5 h-5" /> },
   { href: '/dashboard/menu', label: 'Menu', icon: <BookOpen className="w-5 h-5" /> },
+  { href: '/dashboard/specials', label: 'Specials', icon: <Sparkles className="w-5 h-5" /> },
   { href: '/dashboard/tables', label: 'Tables', icon: <UtensilsCrossed className="w-5 h-5" /> },
+  { href: '/dashboard/waitlist', label: 'Waitlist', icon: <Clock className="w-5 h-5" /> },
+  { href: '/dashboard/promotions', label: 'Promotions', icon: <Gift className="w-5 h-5" /> },
   { href: '/dashboard/staff', label: 'Staff', icon: <Users className="w-5 h-5" /> },
   { href: '/dashboard/feedback', label: 'Feedback', icon: <Star className="w-5 h-5" /> },
   { href: '/dashboard/logs', label: 'Activity', icon: <Receipt className="w-5 h-5" /> },
