@@ -867,13 +867,15 @@ bun run lint  # PASSED (only font warning)
 
 | File | Changes |
 |------|--------|
-| `/src/app/staff/login/page.tsx` | Demo credentials moved to env vars with guards |
+| `/src/app/staff/login/page.tsx` | Demo credentials moved to env vars + honeypot fields |
 | `/src/lib/rate-limit.ts` | New rate limiting library created |
 | `/src/lib/admin-auth.ts` | Custom claims support with fallback |
-| `/src/app/api/staff/verify/route.ts` | Rate limiting added |
-| `/src/app/api/orders/route.ts` | Rate limiting added |
-| `/src/app/api/admin/magic-link/route.ts` | Rate limiting added |
-| `/firestore.rules` | Custom claims, plan restrictions |
+| `/src/lib/security-defense.ts` | **NEW** Honeypot, ban checking, suspicious activity tracking |
+| `/src/middleware.ts` | Enhanced with ban checking, IP blocking |
+| `/src/app/api/staff/verify/route.ts` | Rate limiting + honeypot + ban validation |
+| `/src/app/api/orders/route.ts` | Rate limiting + honeypot + ban validation |
+| `/src/app/api/admin/security/route.ts` | **NEW** Ban management API for SuperAdmin |
+| `/firestore.rules` | Custom claims, plan restrictions, banned_ips, banned_devices, security_events |
 | `/next.config.ts` | Security headers (CSP, X-Frame-Options, etc.) |
 | `/src/services/securityService.ts` | Graceful handling of missing functions |
 
@@ -890,8 +892,52 @@ bun run lint
 
 # Build check
 bun run build
-# Result: PASSED (36 pages generated successfully)
+# Result: PASSED (37 pages generated successfully)
 ```
+
+### Additional Security Measures Implemented
+
+#### Honeypot Protection
+- Hidden form fields in staff login and order forms
+- Bots that fill these fields are detected and blocked
+- Silent failure to confuse automated attacks
+- Tracked in `security_events` collection
+
+#### Ban System
+- **IP Banning**: Automatic and manual IP bans
+- **Device Banning**: Device-specific bans
+- **Auto-Ban Triggers**:
+  - 3+ honeypot triggers → 24-hour auto-ban
+  - High suspicious activity score → auto-ban
+- **Management**: SuperAdmin can ban/unban via `/api/admin/security`
+
+#### Suspicious Activity Tracking
+- Honeypot triggers
+- Invalid timing patterns (too fast/slow form submissions)
+- Rapid request patterns
+- Failed PIN attempts
+- All logged to `security_events` collection
+
+#### Request Timing Validation
+- Minimum form fill time: 1.5 seconds
+- Maximum form fill time: 30 minutes
+- Prevents automated form submission bots
+
+#### Middleware Enhancements
+- Ban checking on every request
+- Stricter rate limits:
+  - Staff verify: 3 requests / 15 minutes
+  - Orders: 10 requests / minute
+  - Auth: 5 requests / minute
+  - Admin: 20 requests / minute
+- Request ID tracking for audit trails
+
+#### New Firestore Collections
+| Collection | Purpose |
+|------------|---------|
+| `banned_ips` | Stores IP bans with expiry |
+| `banned_devices` | Stores device bans |
+| `security_events` | Audit trail of suspicious activity |
 
 ### Final Status
 
@@ -901,6 +947,9 @@ bun run build
 - ✅ All MEDIUM severity vulnerabilities have been addressed
 - ⚠️ LOW severity items remain but are not blocking
 - ✅ Security posture significantly improved
+- ✅ Honeypot protection implemented
+- ✅ IP/Device ban system implemented
+- ✅ Suspicious activity tracking implemented
 - ⚠️ NOT production-ready - requires penetration testing and security audit
 
 ---

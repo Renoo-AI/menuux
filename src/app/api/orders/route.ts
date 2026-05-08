@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { checkRateLimit, rateLimitResponse, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
+import { validateFormSubmission, checkBanned, trackSuspiciousActivity, getClientIp } from '@/lib/security-defense';
 
 // Initialize Firebase Admin
 function getAdminApp() {
@@ -35,8 +36,34 @@ function sanitize(str: string | undefined, maxLength: number): string {
 // POST - Create secure order with server-side validation
 export async function POST(request: NextRequest) {
   try {
+    // Check if IP is banned first
+    const banCheck = await checkBanned(request);
+    if (banCheck.isBanned) {
+      return NextResponse.json(
+        { error: 'Access denied', message: 'Your access has been restricted.' },
+        { status: 403 }
+      );
+    }
+    
     const body = await request.json();
     const { restaurantId, tableId, items, customerName, notes } = body;
+    
+    // Validate honeypot fields (bot detection)
+    const clientIp = getClientIp(request);
+    const formValidation = validateFormSubmission(request, body, `order:${clientIp}`);
+    
+    if (!formValidation.isValid) {
+      // Track suspicious activity
+      trackSuspiciousActivity(request, {
+        type: 'honeypot_triggered',
+        identifier: `order:${clientIp}`,
+        details: { reason: formValidation.reason, restaurantId },
+        timestamp: Date.now(),
+      });
+      
+      // Return generic error (don't reveal honeypot detection)
+      return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+    }
     
     // Rate limit by restaurant + table (prevent order spam)
     if (restaurantId && tableId) {
@@ -173,6 +200,8 @@ export async function POST(request: NextRequest) {
         notes: sanitizedNotes || null,
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
+        // Track source IP for security
+        sourceIp: clientIp,
       };
       
       transaction.set(orderRef, orderData);

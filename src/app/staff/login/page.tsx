@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStaffSession } from '@/contexts/StaffSessionContext';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,9 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Coffee, Eye, EyeOff, Loader2, Shield } from 'lucide-react';
+
+// Honeypot field names (should match server-side)
+const HONEYPOT_FIELDS = ['website', 'fax', 'company_name'];
 
 export default function StaffLoginPage() {
   const router = useRouter();
@@ -24,8 +27,20 @@ export default function StaffLoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   
+  // Honeypot fields (should remain empty)
+  const [honeypotWebsite, setHoneypotWebsite] = useState('');
+  const [honeypotFax, setHoneypotFax] = useState('');
+  
+  // Form timing
+  const [formLoadTime, setFormLoadTime] = useState(0);
+  
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Record form load time for timing validation
+  useEffect(() => {
+    setFormLoadTime(Date.now());
+  }, []);
 
   // Redirect if already authenticated
   if (sessionLoading) {
@@ -44,6 +59,28 @@ export default function StaffLoginPage() {
   const handleStaffLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    
+    // Honeypot check - if filled, silently fail (bot detection)
+    if (honeypotWebsite || honeypotFax) {
+      // Log the honeypot trigger silently
+      console.warn('Honeypot triggered - possible bot detected');
+      // Fake success to confuse bots
+      setTimeout(() => {
+        setError('Invalid credentials');
+        setIsLoading(false);
+      }, 1500);
+      setIsLoading(true);
+      return;
+    }
+    
+    // Timing check - too fast = bot
+    const elapsed = Date.now() - formLoadTime;
+    if (elapsed < 1500) {
+      // Too fast, likely a bot
+      setError('Please try again');
+      return;
+    }
+    
     setIsLoading(true);
 
     try {
@@ -64,6 +101,25 @@ export default function StaffLoginPage() {
   const handleSuperadminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    
+    // Honeypot check
+    if (honeypotWebsite || honeypotFax) {
+      console.warn('Honeypot triggered - possible bot detected');
+      setTimeout(() => {
+        setError('Invalid credentials');
+        setIsLoading(false);
+      }, 2000);
+      setIsLoading(true);
+      return;
+    }
+    
+    // Timing check
+    const elapsed = Date.now() - formLoadTime;
+    if (elapsed < 2000) {
+      setError('Please try again');
+      return;
+    }
+    
     setIsLoading(true);
 
     try {
@@ -166,6 +222,28 @@ export default function StaffLoginPage() {
 
             <TabsContent value="staff" className="space-y-4 mt-4">
               <form onSubmit={handleStaffLogin} className="space-y-4">
+                {/* Honeypot fields - hidden from real users */}
+                <div className="hidden" aria-hidden="true">
+                  <Input
+                    name="website"
+                    type="text"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    value={honeypotWebsite}
+                    onChange={(e) => setHoneypotWebsite(e.target.value)}
+                    className="absolute -left-[9999px]"
+                  />
+                  <Input
+                    name="fax"
+                    type="text"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    value={honeypotFax}
+                    onChange={(e) => setHoneypotFax(e.target.value)}
+                    className="absolute -left-[9999px]"
+                  />
+                </div>
+                
                 <div className="space-y-2">
                   <Label htmlFor="restaurant" className="text-[#3A322D] font-medium">
                     Restaurant Code
@@ -282,6 +360,28 @@ export default function StaffLoginPage() {
 
             <TabsContent value="superadmin" className="space-y-4 mt-4">
               <form onSubmit={handleSuperadminLogin} className="space-y-4">
+                {/* Honeypot fields - hidden from real users */}
+                <div className="hidden" aria-hidden="true">
+                  <Input
+                    name="website"
+                    type="text"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    value={honeypotWebsite}
+                    onChange={(e) => setHoneypotWebsite(e.target.value)}
+                    className="absolute -left-[9999px]"
+                  />
+                  <Input
+                    name="fax"
+                    type="text"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    value={honeypotFax}
+                    onChange={(e) => setHoneypotFax(e.target.value)}
+                    className="absolute -left-[9999px]"
+                  />
+                </div>
+                
                 <div className="space-y-2">
                   <Label htmlFor="email" className="text-[#3A322D] font-medium">
                     Admin Email

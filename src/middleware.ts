@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { checkBanned, getClientIp, bannedResponse } from '@/lib/security-defense';
 
 // Rate limiting store (in-memory for development, use Redis in production)
 const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
@@ -12,17 +13,18 @@ const RATE_LIMITS = {
   auth: { windowMs: 60 * 1000, max: 5 },
   // Admin endpoints: 20 requests per minute
   admin: { windowMs: 60 * 1000, max: 20 },
+  // Order endpoints: 10 requests per minute
+  orders: { windowMs: 60 * 1000, max: 10 },
+  // Staff verification: 3 requests per 15 minutes (very strict)
+  staffVerify: { windowMs: 15 * 60 * 1000, max: 3 },
 };
 
-function getRateLimitKey(request: NextRequest, type: 'global' | 'auth' | 'admin'): string {
-  // Use IP address as identifier
-  const ip = request.headers.get('x-forwarded-for') || 
-             request.headers.get('x-real-ip') || 
-             'unknown';
+function getRateLimitKey(request: NextRequest, type: keyof typeof RATE_LIMITS): string {
+  const ip = getClientIp(request);
   return `${type}:${ip}`;
 }
 
-function checkRateLimit(request: NextRequest, type: 'global' | 'auth' | 'admin'): { allowed: boolean; remaining: number; resetTime: number } {
+function checkRateLimit(request: NextRequest, type: keyof typeof RATE_LIMITS): { allowed: boolean; remaining: number; resetTime: number } {
   const config = RATE_LIMITS[type];
   const key = getRateLimitKey(request, type);
   const now = Date.now();
@@ -59,18 +61,32 @@ function addSecurityHeaders(response: NextResponse): NextResponse {
   return response;
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  
+  // Get client IP for ban checking
+  const clientIp = getClientIp(request);
+  
+  // Check if IP is banned (for all requests)
+  const banCheck = await checkBanned(request);
+  if (banCheck.isBanned) {
+    console.warn(`Blocked banned IP: ${clientIp} - ${banCheck.reason}`);
+    return bannedResponse(banCheck.reason || 'Access denied');
+  }
   
   // Apply rate limiting to API routes
   if (pathname.startsWith('/api/')) {
     // Determine rate limit type
-    let rateLimitType: 'global' | 'auth' | 'admin' = 'global';
+    let rateLimitType: keyof typeof RATE_LIMITS = 'global';
     
-    if (pathname.includes('/auth/') || pathname.includes('/login') || pathname.includes('/magic-link')) {
+    if (pathname.includes('/staff/verify')) {
+      rateLimitType = 'staffVerify';
+    } else if (pathname.includes('/auth/') || pathname.includes('/login') || pathname.includes('/magic-link')) {
       rateLimitType = 'auth';
     } else if (pathname.startsWith('/api/admin/')) {
       rateLimitType = 'admin';
+    } else if (pathname.includes('/orders') && request.method === 'POST') {
+      rateLimitType = 'orders';
     }
     
     const { allowed, remaining, resetTime } = checkRateLimit(request, rateLimitType);
@@ -100,12 +116,14 @@ export function middleware(request: NextRequest) {
     response.headers.set('X-RateLimit-Limit', String(RATE_LIMITS[rateLimitType].max));
     response.headers.set('X-RateLimit-Remaining', String(remaining));
     response.headers.set('X-RateLimit-Reset', String(Math.ceil(resetTime / 1000)));
+    response.headers.set('X-Request-Id', crypto.randomUUID());
     
     return addSecurityHeaders(response);
   }
   
   // Continue for non-API routes
   const response = NextResponse.next();
+  response.headers.set('X-Request-Id', crypto.randomUUID());
   return addSecurityHeaders(response);
 }
 
@@ -118,5 +136,9 @@ export const config = {
     '/admin/:path*',
     // Apply to auth routes
     '/auth/:path*',
+    // Apply to staff routes
+    '/staff/:path*',
+    // Apply to public ordering routes
+    '/r/:slug/t/:tableId/:path*',
   ],
 };

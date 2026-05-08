@@ -302,6 +302,34 @@ service cloud.firestore {
     }
     
     // ============================================
+    // BANNED IPS (SuperAdmin security)
+    // ============================================
+    match /banned_ips/{ipId} {
+      // Only superadmin can read/write
+      allow read, write: if isSuperAdmin();
+    }
+    
+    // ============================================
+    // BANNED DEVICES (SuperAdmin security)
+    // ============================================
+    match /banned_devices/{deviceId} {
+      // Only superadmin can read/write
+      allow read, write: if isSuperAdmin();
+    }
+    
+    // ============================================
+    // SECURITY EVENTS (Audit trail)
+    // ============================================
+    match /security_events/{eventId} {
+      // System can create events (from API routes)
+      allow create: if true;
+      // Only superadmin can read
+      allow read: if isSuperAdmin();
+      // Events are immutable
+      allow update, delete: if false;
+    }
+    
+    // ============================================
     // DENY ALL OTHER (Default Deny)
     // ============================================
     match /{document=**} {
