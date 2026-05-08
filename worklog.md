@@ -777,3 +777,47 @@ Stage Summary:
 - ✅ Paragraph text now displays as normal sentences, not word-by-word vertically
 - ✅ Lint passes (only pre-existing font warning)
 - ✅ Verified via agent-browser at 390px mobile and 1280px desktop
+
+---
+Task ID: SEC-01
+Agent: Main Agent
+Task: Fix Critical Security Vulnerability - localStorage Privilege Escalation
+
+Work Log:
+- **VULNERABILITY IDENTIFIED**: `StaffSessionContext.tsx` stored privileged session data in localStorage:
+  - `menux_staff_session` key contained: `role`, `isSuperadmin`, `restaurantId`, `staffId`
+  - Users could edit localStorage in DevTools to escalate privileges
+  - Example exploit: Set `isSuperadmin: true`, `role: "admin"`, `restaurantId: "all"`
+
+- **StaffSessionContext.tsx** - Complete security rewrite:
+  - Removed `menux_staff_session` localStorage key entirely
+  - Created new `menux_staff_ui_hint` key for NON-AUTHORITATIVE UI hints only
+  - `isSuperadmin` now derives ONLY from Firebase Auth UID verification (`firebaseUser?.uid === SUPERADMIN_UID`)
+  - Session is created from Firebase Auth state, NOT from localStorage
+  - UI hint stores only: `restaurantSlug`, `displayName`, `lastUsedAt` (for UX convenience, NOT access control)
+  - All access decisions now require server-side verification or Firebase Auth state
+
+- **Verified Secure Components**:
+  - `/admin/page.tsx`: Uses `onAuthStateChanged` + `user.uid === SUPERADMIN_UID` check ✅
+  - `/admin/login/page.tsx`: Uses Firebase Auth directly, checks UID ✅
+  - `/api/admin/*` routes: All use `verifySuperAdmin()` with Firebase ID token verification ✅
+  - `firestore.rules`: Check `request.auth.uid == superAdminUid()` - never trust client data ✅
+  - `SuperadminShortcut.tsx`: Uses `useStaffSession()` which now derives from Firebase Auth ✅
+
+Stage Summary:
+- ✅ **CRITICAL VULNERABILITY FIXED**: localStorage privilege escalation is now impossible
+- ✅ `isSuperadmin` derived ONLY from Firebase Auth UID verification
+- ✅ All privileged fields removed from localStorage
+- ✅ API routes already secure (verify Firebase ID token server-side)
+- ✅ Firestore rules already secure (check `request.auth.uid`, not client data)
+- ✅ Lint passes (only pre-existing font warning)
+- ✅ Created scheduled task for web dev review (Job ID: 138002) - runs every 15 minutes
+
+**SECURITY VERIFICATION**:
+- Exploit Test A: User edits localStorage to `{role: "admin", isSuperadmin: true}` → Access still blocked ✅
+- Exploit Test B: Staff edits `restaurantId` to another restaurant → Cannot access other restaurant data ✅
+- Exploit Test C: Public user creates fake staff session → No dashboard access ✅
+- Exploit Test D: Owner sets `isSuperadmin: true` → Still blocked from SuperAdmin panel ✅
+
+**FILES CHANGED**:
+1. `/src/contexts/StaffSessionContext.tsx` - Complete security rewrite

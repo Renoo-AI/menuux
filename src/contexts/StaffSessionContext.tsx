@@ -19,63 +19,93 @@ interface StaffSessionContextType {
 
 const StaffSessionContext = createContext<StaffSessionContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'menux_staff_session';
+// SECURITY: Only store non-authoritative UI hints in localStorage
+// NEVER store: role, isSuperadmin, restaurantId authorization, staffId authorization
+// This key only stores minimal UX convenience data
+const UI_HINT_KEY = 'menux_staff_ui_hint';
+
+interface StaffUIHint {
+  restaurantSlug: string;
+  displayName: string;
+  lastUsedAt: number;
+}
 
 export function StaffSessionProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<StaffSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSuperadmin, setIsSuperadmin] = useState(false);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
 
-  // Sync with Firebase Auth state - this ensures superadmin shortcut works after admin login
+  // SECURITY: isSuperadmin is derived ONLY from Firebase Auth UID verification
+  // NEVER trust localStorage or client-provided data for superadmin status
+  const isSuperadmin = firebaseUser?.uid === SUPERADMIN_UID;
+
+  // Sync with Firebase Auth state - this is the ONLY source of truth for superadmin
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setFirebaseUser(user);
       
-      // If user is superadmin via Firebase Auth, set the session
+      // SECURITY: If user is superadmin via Firebase Auth, create an in-memory session
+      // This session is derived from Firebase Auth, NOT from localStorage
       if (user && user.uid === SUPERADMIN_UID) {
-        const superadminSession: StaffSession & { isSuperadmin?: boolean } = {
+        const superadminSession: StaffSession = {
           restaurantId: 'all',
           restaurantSlug: 'admin',
           restaurantName: 'MenuxPro Admin',
           staffId: user.uid,
           staffName: user.displayName || user.email?.split('@')[0] || 'Super Admin',
           role: 'admin',
-          isSuperadmin: true,
         };
         
         setSession(superadminSession);
-        setIsSuperadmin(true);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(superadminSession));
+      } else if (!user) {
+        // User signed out - clear session
+        setSession(null);
       }
     });
     
     return () => unsubscribe();
   }, []);
 
-  // Load session from localStorage on mount
+  // Load staff session hint from localStorage on mount (non-authoritative UI hint only)
+  // SECURITY: This is only for UX convenience - it does NOT grant any access
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored) as StaffSession & { isSuperadmin?: boolean };
-        setSession(parsed);
-        setIsSuperadmin(parsed.isSuperadmin ?? parsed.staffId === SUPERADMIN_UID);
-      }
-    } catch (error) {
-      console.error('Failed to load staff session:', error);
-      localStorage.removeItem(STORAGE_KEY);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+    const initializeSession = async () => {
+      try {
+        // Check if we have a Firebase user first
+        if (firebaseUser) {
+          // Firebase Auth already initialized the session
+          setIsLoading(false);
+          return;
+        }
 
-  // Login with restaurant slug + PIN
+        // Load UI hint for convenience (e.g., pre-fill restaurant slug)
+        const stored = localStorage.getItem(UI_HINT_KEY);
+        if (stored) {
+          const hint = JSON.parse(stored) as StaffUIHint;
+          
+          // SECURITY: We do NOT create a session from localStorage
+          // The hint is only used for UX convenience (pre-filling forms, etc.)
+          // Actual session creation requires server verification via PIN or Firebase Auth
+          console.log('UI hint loaded for convenience:', hint.restaurantSlug);
+        }
+      } catch (error) {
+        console.error('Failed to load UI hint:', error);
+        localStorage.removeItem(UI_HINT_KEY);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initializeSession();
+  }, [firebaseUser]);
+
+  // Login with restaurant slug + PIN (server-side verification)
   const loginStaff = useCallback(async (restaurantSlug: string, pin: string): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true);
     
     try {
       // Call the server-side API for PIN verification
+      // SECURITY: The server verifies the PIN and returns the session
       const response = await fetch('/api/staff/verify', {
         method: 'POST',
         headers: {
@@ -100,8 +130,15 @@ export function StaffSessionProvider({ children }: { children: React.ReactNode }
         };
         
         setSession(newSession);
-        setIsSuperadmin(false);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(newSession));
+        
+        // SECURITY: Only store non-authoritative UI hint
+        // This does NOT grant access - access is verified server-side
+        const uiHint: StaffUIHint = {
+          restaurantSlug: data.session.restaurantSlug,
+          displayName: data.session.staffName,
+          lastUsedAt: Date.now(),
+        };
+        localStorage.setItem(UI_HINT_KEY, JSON.stringify(uiHint));
         
         return { success: true };
       }
@@ -117,7 +154,7 @@ export function StaffSessionProvider({ children }: { children: React.ReactNode }
     }
   }, []);
 
-  // Login superadmin with email/password
+  // Login superadmin with email/password (Firebase Auth verification)
   const loginSuperadmin = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true);
     
@@ -129,26 +166,14 @@ export function StaffSessionProvider({ children }: { children: React.ReactNode }
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
-      // Check if this is the superadmin
+      // SECURITY: Check if this is the superadmin using Firebase UID
+      // This is the ONLY check that matters - localStorage is NOT trusted
       if (user.uid === SUPERADMIN_UID) {
-        const newSession: StaffSession & { isSuperadmin?: boolean } = {
-          restaurantId: 'all',
-          restaurantSlug: 'admin',
-          restaurantName: 'MenuxPro Admin',
-          staffId: user.uid,
-          staffName: 'Super Admin',
-          role: 'admin',
-          isSuperadmin: true,
-        };
-        
-        setSession(newSession);
-        setIsSuperadmin(true);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(newSession));
-        
+        // Session will be created by onAuthStateChanged listener
         return { success: true };
       }
       
-      // Not the superadmin
+      // Not the superadmin - sign out immediately
       await import('firebase/auth').then(({ signOut }) => signOut(auth));
       return { success: false, error: 'Access denied. Superadmin privileges required.' };
     } catch (error: unknown) {
@@ -177,14 +202,15 @@ export function StaffSessionProvider({ children }: { children: React.ReactNode }
       // Ignore signout errors
     }
     setSession(null);
-    setIsSuperadmin(false);
-    localStorage.removeItem(STORAGE_KEY);
+    // Clear UI hint on logout
+    localStorage.removeItem(UI_HINT_KEY);
   }, []);
 
   const value: StaffSessionContextType = {
     session,
     isLoading,
     isStaffAuthenticated: session !== null,
+    // SECURITY: isSuperadmin comes ONLY from Firebase Auth UID verification
     isSuperadmin,
     loginStaff,
     loginSuperadmin,
@@ -213,10 +239,12 @@ export function useStaffSession() {
 }
 
 // Hook for protecting staff routes
+// SECURITY: All authorization is based on Firebase Auth, NOT localStorage
 export function useRequireStaff(allowedRoles?: StaffRole[]) {
   const { session, isLoading, isStaffAuthenticated, isSuperadmin } = useStaffSession();
   
-  // Superadmin has access to everything
+  // SECURITY: Superadmin status comes from Firebase Auth UID verification
+  // Superadmin has access to everything (verified server-side)
   const hasRequiredRole = isSuperadmin || !allowedRoles || (session && allowedRoles.includes(session.role));
   
   return {
