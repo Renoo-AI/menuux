@@ -37,44 +37,48 @@ export default function LandingPage() {
       </nav>
 
       {/* Hero Section */}
-      <section className="relative pt-40 pb-32 px-8 md:px-16 max-w-7xl mx-auto overflow-hidden">
-        <div className="flex flex-col md:flex-row items-center gap-8">
-          <div className="w-full md:w-1/2 flex flex-col gap-6 min-w-0">
-            <h1 className="font-display text-display-xl text-primary leading-tight">
-              Le menu digital <br/>
-              <span className="italic font-normal">nouvelle génération.</span>
-            </h1>
-            <p className="font-body-lg text-on-surface-variant max-w-lg text-balance">
-              QR menus and table ordering designed for modern cafés and restaurants. 
-              L&apos;élégance du papier, la puissance du digital.
-            </p>
-            <div className="flex flex-wrap gap-4">
-              <Button asChild size="lg" className="bg-primary text-on-primary luxury-shadow hover:opacity-90">
-                <Link href="/login?signup=true">Get Started Free</Link>
-              </Button>
-              <Button asChild variant="outline" size="lg" className="border-outline hover:bg-surface-container-low">
-                <Link href="/r/demo">Voir une démo</Link>
-              </Button>
+      <section className="w-full px-6 sm:px-8 lg:px-12 pt-40 pb-32 overflow-hidden">
+        <div className="mx-auto w-full max-w-7xl">
+          <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)] lg:gap-16">
+            {/* Text Content */}
+            <div className="w-full min-w-0 max-w-3xl">
+              <h1 className="font-display text-display-xl text-primary leading-tight max-w-4xl">
+                Le menu digital <br/>
+                <span className="italic font-normal">nouvelle génération.</span>
+              </h1>
+              <p className="mt-6 w-full max-w-3xl whitespace-normal break-normal text-lg md:text-xl leading-8 text-on-surface-variant" style={{ overflowWrap: 'normal' }}>
+                QR menus and table ordering designed for modern cafés and restaurants. 
+                L&apos;élégance du papier, la puissance du digital.
+              </p>
+              <div className="flex flex-wrap gap-4 mt-8">
+                <Button asChild size="lg" className="bg-primary text-on-primary luxury-shadow hover:opacity-90">
+                  <Link href="/login?signup=true">Get Started Free</Link>
+                </Button>
+                <Button asChild variant="outline" size="lg" className="border-outline hover:bg-surface-container-low">
+                  <Link href="/r/demo">Voir une démo</Link>
+                </Button>
+              </div>
             </div>
-          </div>
-          
-          <div className="w-full md:w-1/2 relative mt-12 md:mt-0">
-            <div className="rounded-xl overflow-hidden luxury-shadow relative aspect-square bg-surface-container">
-              <Image
-                src="https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=800&h=800&fit=crop"
-                alt="Premium café interior"
-                fill
-                className="object-cover"
-                priority
-              />
-              {/* Mobile Mockup */}
-              <div className="absolute -bottom-10 right-8 w-48 h-96 bg-primary rounded-[2.5rem] border-[6px] border-primary-container luxury-shadow hidden lg:block overflow-hidden">
+            
+            {/* Image Content */}
+            <div className="w-full min-w-[360px] relative mt-12 lg:mt-0">
+              <div className="rounded-xl overflow-hidden luxury-shadow relative aspect-square bg-surface-container">
                 <Image
-                  src="https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=400&h=800&fit=crop"
-                  alt="Menu app on phone"
+                  src="https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=800&h=800&fit=crop"
+                  alt="Premium café interior"
                   fill
                   className="object-cover"
+                  priority
                 />
+                {/* Mobile Mockup */}
+                <div className="absolute -bottom-10 right-8 w-48 h-96 bg-primary rounded-[2.5rem] border-[6px] border-primary-container luxury-shadow hidden lg:block overflow-hidden">
+                  <Image
+                    src="https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=400&h=800&fit=crop"
+                    alt="Menu app on phone"
+                    fill
+                    className="object-cover"
+                  />
+                </div>
               </div>
             </div>
           </div>

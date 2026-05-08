@@ -704,3 +704,38 @@ Stage Summary:
 - ✅ Dev server running without issues
 - ✅ Created cron job for web dev review (ID: 137967) - runs every 15 minutes
 - ⚠️ User should verify fix at multiple breakpoints (360px, 390px, tablet, 1280px)
+
+---
+Task ID: CSS-03
+Agent: Main Agent
+Task: Fix text wrapping bug - layout width issue
+
+Work Log:
+- **page.tsx (Landing page)** - Hero Section complete rewrite:
+  - Changed from `flex flex-col md:flex-row` with `md:w-1/2` (restrictive 50% width)
+  - To `grid grid-cols-1 lg:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]`
+  - Text container now has `w-full min-w-0 max-w-3xl` (proper width constraints)
+  - Paragraph now has `whitespace-normal break-normal` with inline `overflowWrap: 'normal'`
+  - Added `text-lg md:text-xl leading-8` for better readability
+  - Image container has `w-full min-w-[360px]` to ensure proper sizing
+
+Key CSS pattern for fixing text wrapping:
+```tsx
+<section className="w-full px-6 sm:px-8 lg:px-12">
+  <div className="mx-auto w-full max-w-7xl">
+    <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)] lg:gap-16">
+      <div className="w-full min-w-0 max-w-3xl">
+        <p className="w-full max-w-3xl whitespace-normal break-normal" style={{ overflowWrap: 'normal' }}>
+          {text}
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+```
+
+Stage Summary:
+- ✅ Hero section now uses proper grid layout with minmax for responsive widths
+- ✅ Text container no longer restricted to 50% width on desktop
+- ✅ Paragraph has explicit width constraints and overflow handling
+- ✅ Lint passes
