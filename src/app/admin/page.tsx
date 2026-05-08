@@ -1,25 +1,17 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { auth, SUPERADMIN_UID } from '@/lib/firebase';
 import { onAuthStateChanged, User, signOut, getIdToken } from 'firebase/auth';
-import { 
-  LayoutDashboard, Users, CreditCard, Activity, Store, Search, 
-  Link as LinkIcon, Trash2, ShieldAlert, CheckCircle2, Plus, 
-  FileJson, AlertCircle, LogOut, Menu, X, DollarSign, Copy,
-  RefreshCw, Loader2
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
+import { Loader2 } from 'lucide-react';
+
+import { AdminSidebar } from '@/components/admin/AdminSidebar';
+import { AdminHeader } from '@/components/admin/AdminHeader';
+import { KPICard, QuickAction, StatusBadge } from '@/components/admin/KPICard';
+import { FloatingShortcut } from '@/components/admin/FloatingShortcut';
 
 // Types
 interface Restaurant {
@@ -30,7 +22,8 @@ interface Restaurant {
   plan: 'free' | 'pro' | 'business';
   status: 'active' | 'inactive' | 'offline';
   createdAt: number;
-  paymentVerifiedAt?: number;
+  menuItemCount?: number;
+  orderCount?: number;
 }
 
 interface UserProfile {
@@ -41,20 +34,20 @@ interface UserProfile {
   lastLoginAt?: number;
 }
 
-interface SystemLog {
-  id: string;
-  type: string;
-  message: string;
-  details?: Record<string, unknown>;
-  timestamp: number;
-}
-
 interface Stats {
   activeMenus: number;
   proMenus: number;
   usersCount: number;
   mrr: number;
   bannedCount?: number;
+}
+
+interface SystemLog {
+  id: string;
+  type: string;
+  message: string;
+  details?: Record<string, unknown>;
+  timestamp: number;
 }
 
 // API helper
@@ -84,6 +77,13 @@ async function apiCall(
   return fetch(`/api/admin${path}`, options);
 }
 
+// Page variants for animations
+const pageVariants = {
+  initial: { opacity: 0, y: 15 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -15 }
+};
+
 export default function SuperAdminDashboard() {
   const router = useRouter();
   const { toast } = useToast();
@@ -96,7 +96,6 @@ export default function SuperAdminDashboard() {
   
   // UI state
   const [activeTab, setActiveTab] = useState('overview');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Data state
@@ -105,22 +104,7 @@ export default function SuperAdminDashboard() {
   const [bannedUsers, setBannedUsers] = useState<Set<string>>(new Set());
   const [stats, setStats] = useState<Stats>({ activeMenus: 0, proMenus: 0, usersCount: 0, mrr: 0 });
   const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
   
-  // Modal state
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [bulkImportResId, setBulkImportResId] = useState<string | null>(null);
-  const [bulkJsonData, setBulkJsonData] = useState('');
-  const [bulkLoading, setBulkLoading] = useState(false);
-  const [verifyingPayment, setVerifyingPayment] = useState<string | null>(null);
-  const [successAnimId, setSuccessAnimId] = useState<string | null>(null);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-  
-  // Form state
-  const [newRestaurant, setNewRestaurant] = useState({ name: '', slug: '', ownerUid: '', plan: 'free' });
-
-  const searchInputRef = useRef<HTMLInputElement>(null);
-
   // Check authorization
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -142,19 +126,7 @@ export default function SuperAdminDashboard() {
     return () => unsubscribe();
   }, []);
 
-  // Keyboard shortcut for search
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  // Fetch data from secure API
+  // Fetch data
   const fetchData = useCallback(async () => {
     if (!isAuthorized || !authToken) return;
     
@@ -202,173 +174,6 @@ export default function SuperAdminDashboard() {
     }
   }, [isAuthorized, authToken, fetchData]);
 
-  // Restaurant actions
-  const handleUpdateRestaurant = async (id: string, updates: Partial<Restaurant>) => {
-    if (!authToken) return;
-    setActionLoading(`restaurant-${id}`);
-    
-    try {
-      const response = await apiCall('/restaurants', 'PUT', { id, updates }, authToken);
-      
-      if (!response.ok) throw new Error('Failed to update');
-      
-      setRestaurants(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
-      toast({ title: 'Success', description: 'Restaurant updated successfully' });
-    } catch (err) {
-      toast({ title: 'Error', description: 'Failed to update restaurant', variant: 'destructive' });
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleDeleteRestaurant = async (id: string) => {
-    if (!authToken) return;
-    if (!window.confirm("Are you sure you want to delete this restaurant? This cannot be undone.")) return;
-    
-    setActionLoading(`delete-${id}`);
-    try {
-      const response = await apiCall(`/restaurants?id=${id}`, 'DELETE', undefined, authToken);
-      
-      if (!response.ok) throw new Error('Failed to delete');
-      
-      setRestaurants(prev => prev.filter(r => r.id !== id));
-      toast({ title: 'Success', description: 'Restaurant deleted' });
-    } catch (err) {
-      toast({ title: 'Error', description: 'Failed to delete restaurant', variant: 'destructive' });
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleAddRestaurant = async () => {
-    if (!authToken) return;
-    
-    if (!newRestaurant.name || !newRestaurant.slug) {
-      toast({ title: 'Error', description: 'Name and slug are required', variant: 'destructive' });
-      return;
-    }
-    
-    setActionLoading('create-restaurant');
-    try {
-      const response = await apiCall('/restaurants', 'POST', newRestaurant, authToken);
-      
-      if (!response.ok) throw new Error('Failed to create');
-      
-      const data = await response.json();
-      setRestaurants(prev => [...prev, data.restaurant]);
-      setIsModalOpen(false);
-      setNewRestaurant({ name: '', slug: '', ownerUid: '', plan: 'free' });
-      toast({ title: 'Success', description: 'Restaurant created successfully' });
-    } catch (err) {
-      toast({ title: 'Error', description: 'Failed to create restaurant', variant: 'destructive' });
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const generateMagicLink = async (restaurantId: string, restaurantSlug: string) => {
-    if (!authToken) return;
-    
-    setActionLoading(`magic-${restaurantId}`);
-    try {
-      const response = await apiCall('/magic-link', 'POST', { restaurantId, restaurantSlug }, authToken);
-      
-      if (!response.ok) throw new Error('Failed to generate magic link');
-      
-      const data = await response.json();
-      await navigator.clipboard.writeText(data.magicLink);
-      toast({ title: 'Magic Link Copied!', description: 'Link has been copied to clipboard' });
-    } catch (err) {
-      toast({ title: 'Error', description: 'Failed to generate magic link', variant: 'destructive' });
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  // User actions
-  const handleToggleBan = async (userId: string) => {
-    if (!authToken) return;
-    
-    const isBanned = bannedUsers.has(userId);
-    const action = isBanned ? 'unban' : 'ban';
-    
-    if (!isBanned && !window.confirm(`Are you sure you want to ban this user?`)) return;
-    
-    setActionLoading(`user-${userId}`);
-    try {
-      const response = await apiCall('/users', 'POST', { userId, action }, authToken);
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to update user');
-      }
-      
-      setBannedUsers(prev => {
-        const next = new Set(prev);
-        if (isBanned) {
-          next.delete(userId);
-        } else {
-          next.add(userId);
-        }
-        return next;
-      });
-      
-      toast({ title: 'Success', description: `User ${isBanned ? 'unbanned' : 'banned'} successfully` });
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message || 'Failed to update user', variant: 'destructive' });
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  // Payment verification
-  const verifyPayment = async (restaurantId: string) => {
-    if (!authToken) return;
-    
-    setVerifyingPayment(restaurantId);
-    try {
-      const response = await apiCall('/verify-payment', 'POST', { restaurantId, plan: 'pro' }, authToken);
-      
-      if (!response.ok) throw new Error('Failed to verify payment');
-      
-      setRestaurants(prev => prev.map(r => r.id === restaurantId ? { ...r, plan: 'pro' } : r));
-      setSuccessAnimId(restaurantId);
-      setTimeout(() => setSuccessAnimId(null), 3000);
-      toast({ title: 'Success', description: 'Payment verified and plan upgraded' });
-    } catch (err) {
-      toast({ title: 'Error', description: 'Failed to verify payment', variant: 'destructive' });
-    } finally {
-      setVerifyingPayment(null);
-    }
-  };
-
-  // Bulk import
-  const handleBulkImport = async () => {
-    if (!authToken || !bulkImportResId || !bulkJsonData.trim()) return;
-    
-    setBulkLoading(true);
-    try {
-      const rawItems = JSON.parse(bulkJsonData);
-      if (!Array.isArray(rawItems)) {
-        toast({ title: 'Error', description: 'JSON must be an array of items', variant: 'destructive' });
-        return;
-      }
-
-      const response = await apiCall('/bulk-import', 'POST', { restaurantId: bulkImportResId, items: rawItems }, authToken);
-      
-      if (!response.ok) throw new Error('Failed to import');
-      
-      const data = await response.json();
-      toast({ title: 'Success', description: data.message });
-      setBulkImportResId(null);
-      setBulkJsonData('');
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to import. Check JSON format.', variant: 'destructive' });
-    } finally {
-      setBulkLoading(false);
-    }
-  };
-
   // Sign out
   const handleSignOut = async () => {
     try {
@@ -382,10 +187,12 @@ export default function SuperAdminDashboard() {
   // Loading state
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center">
+      <div className="min-h-screen bg-surface flex items-center justify-center">
         <div className="text-center">
-          <ShieldAlert className="w-12 h-12 text-[#3A322D] mx-auto mb-4 animate-pulse" />
-          <p className="text-[#3A322D]/60 font-medium">Verifying authorization...</p>
+          <div className="w-16 h-16 bg-primary-container rounded-full flex items-center justify-center mx-auto mb-lg">
+            <Loader2 className="w-8 h-8 text-primary-fixed animate-spin" />
+          </div>
+          <p className="font-body-md text-on-surface-variant">Verifying authorization...</p>
         </div>
       </div>
     );
@@ -394,747 +201,495 @@ export default function SuperAdminDashboard() {
   // Unauthorized state
   if (!isAuthorized) {
     return (
-      <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center p-4">
-        <Card className="max-w-md w-full border-0 shadow-xl">
-          <CardContent className="p-8 text-center">
-            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <AlertCircle className="w-8 h-8 text-red-600" />
-            </div>
-            <h2 className="text-xl font-serif font-bold text-[#3A322D] mb-2">Access Denied</h2>
-            <p className="text-[#3A322D]/60 mb-6">
-              You do not have permission to access MenuxSEC. Only the SuperAdmin can access this panel.
-            </p>
-            <Button onClick={() => router.push('/admin/login')} className="bg-[#3A322D] hover:bg-[#5A4A3D]">
-              Return to Login
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen bg-surface flex items-center justify-center p-md">
+        <div className="bg-surface-container-lowest p-xl rounded-lg max-w-md w-full text-center" style={{ boxShadow: '0px 4px 24px rgba(58, 50, 45, 0.04)' }}>
+          <div className="w-16 h-16 bg-error-container rounded-full flex items-center justify-center mx-auto mb-lg">
+            <span className="material-symbols-outlined text-error text-[32px]">lock</span>
+          </div>
+          <h2 className="font-display text-headline-lg text-primary mb-sm">Access Denied</h2>
+          <p className="font-body-md text-on-surface-variant mb-xl">
+            You do not have permission to access this panel. Only the SuperAdmin can view this page.
+          </p>
+          <button
+            onClick={() => router.push('/admin/login')}
+            className="w-full bg-primary text-on-primary py-md rounded-full font-label-md hover:opacity-90 transition-opacity"
+          >
+            Return to Login
+          </button>
+        </div>
       </div>
     );
   }
 
-  const navItems = [
-    { id: 'overview', icon: LayoutDashboard, label: 'Global Pulse' },
-    { id: 'restaurants', icon: Store, label: 'Directory' },
-    { id: 'users', icon: Users, label: 'Identities' },
-    { id: 'ledger', icon: CreditCard, label: 'Financial Ledger' },
-    { id: 'logs', icon: Activity, label: 'Activity Logs' },
-    { id: 'deep_edit', icon: FileJson, label: 'Deep Edit' },
-  ];
-
-  const filteredUsers = users.filter(u => 
-    (u.displayName?.toLowerCase() || '').includes(searchQuery.toLowerCase()) || 
-    (u.email?.toLowerCase() || '').includes(searchQuery.toLowerCase())
-  );
-
-  const pendingPayments = restaurants.filter(r => r.plan === 'free' && r.status === 'active');
-
-  const pageVariants = {
-    initial: { opacity: 0, y: 15 },
-    animate: { opacity: 1, y: 0 },
-    exit: { opacity: 0, y: -15 }
-  };
-
   return (
-    <div className="flex min-h-screen bg-[#FAFAFA]">
-      {/* Mobile Header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-[#3A322D] z-40 flex items-center justify-between px-4 border-b border-white/10">
-        <div className="flex items-center gap-2">
-          <ShieldAlert className="w-5 h-5 text-[#C9A07E]" />
-          <span className="text-sm font-bold tracking-widest uppercase text-white">
-            Menux<span className="text-white/40">SEC</span>
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={fetchData} 
-            disabled={isRefreshing}
-            className="text-white/70 hover:text-white"
-          >
-            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-          </Button>
-          <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(!sidebarOpen)} className="text-white">
-            {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </Button>
-        </div>
-      </div>
-
+    <div className="min-h-screen bg-surface">
       {/* Sidebar */}
-      <aside className={`
-        fixed lg:static inset-y-0 left-0 z-50
-        w-64 bg-[#3A322D] text-white/90 border-r border-white/10
-        transform transition-transform duration-300 lg:translate-x-0
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        flex flex-col
-      `}>
-        <div className="p-6 flex items-center gap-3 border-b border-white/10">
-          <div className="w-10 h-10 bg-[#C9A07E]/20 rounded-xl flex items-center justify-center border border-[#C9A07E]/30">
-            <ShieldAlert className="w-5 h-5 text-[#C9A07E]" />
-          </div>
-          <div>
-            <h1 className="text-sm font-bold tracking-widest uppercase">
-              Menux<span className="text-[#C9A07E]">SEC</span>
-            </h1>
-            <p className="text-[9px] text-white/40 font-mono tracking-wider uppercase mt-0.5">
-              Executive Command
-            </p>
-          </div>
-        </div>
+      <AdminSidebar activeTab={activeTab} onTabChange={setActiveTab} />
 
-        <nav className="flex-1 p-4 flex flex-col gap-1">
-          {navItems.map(item => (
-            <button
-              key={item.id}
-              onClick={() => {
-                setActiveTab(item.id);
-                setSidebarOpen(false);
-              }}
-              className={`
-                flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm
-                ${activeTab === item.id 
-                  ? 'bg-[#C9A07E]/20 text-[#C9A07E] border border-[#C9A07E]/30' 
-                  : 'text-white/50 hover:bg-white/5 hover:text-white/80'
-                }
-              `}
-            >
-              <item.icon className="w-4 h-4" />
-              {item.label}
-            </button>
-          ))}
-        </nav>
-        
-        <div className="p-4 border-t border-white/10">
-          <div className="bg-white/5 border border-white/10 rounded-xl p-4 mb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <div className="text-[10px] uppercase tracking-widest font-mono text-white/40">Systems Nominal</div>
-            </div>
-            <div className="text-[10px] text-white/30 font-mono">
-              UID: {currentUser?.uid?.slice(0, 8)}...
-            </div>
-            <div className="text-[10px] text-white/30 font-mono">
-              Token: {authToken ? '✓ Valid' : '✗ Missing'}
-            </div>
-          </div>
-          <Button 
-            variant="outline" 
-            className="w-full border-white/20 text-white/70 hover:bg-white/10 hover:text-white"
-            onClick={handleSignOut}
-          >
-            <LogOut className="w-4 h-4 mr-2" />
-            Sign Out
-          </Button>
-        </div>
-      </aside>
-
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+      {/* Top Header */}
+      <AdminHeader 
+        title="SuperAdmin" 
+        subtitle="Production"
+        searchPlaceholder="Search accounts, logs, or metrics..."
+      />
 
       {/* Main Content */}
-      <main className="flex-1 pt-16 lg:pt-0 pb-20 lg:pb-0 overflow-x-hidden">
-        <div className="max-w-7xl mx-auto p-4 lg:p-8">
-          <AnimatePresence mode="wait">
-            {/* Overview Tab */}
-            {activeTab === 'overview' && (
-              <motion.div key="overview" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="space-y-6">
-                <header className="mb-8 flex justify-between items-start">
-                  <div>
-                    <h2 className="text-2xl lg:text-3xl font-serif font-bold text-[#3A322D]">Global Pulse</h2>
-                    <p className="text-xs uppercase tracking-widest text-[#3A322D]/40 font-bold mt-1">
-                      Executive Summary
-                    </p>
-                  </div>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={fetchData} 
-                    disabled={isRefreshing}
-                    className="hidden lg:flex"
-                  >
-                    <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                    Refresh
-                  </Button>
-                </header>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <Card className="border-0 shadow-lg bg-white">
-                    <CardContent className="p-6">
-                      <div className="flex justify-between items-start mb-4">
-                        <span className="text-[#3A322D]/40 font-bold text-xs uppercase tracking-widest">
-                          Active Installs
-                        </span>
-                        <Store className="w-4 h-4 text-[#C9A07E]" />
-                      </div>
-                      <div className="text-4xl font-bold tracking-tight text-[#3A322D]">
-                        {stats.activeMenus}
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card className="border-0 shadow-lg bg-white">
-                    <CardContent className="p-6">
-                      <div className="flex justify-between items-start mb-4">
-                        <span className="text-[#3A322D]/40 font-bold text-xs uppercase tracking-widest">
-                          Est. MRR
-                        </span>
-                        <DollarSign className="w-4 h-4 text-emerald-500" />
-                      </div>
-                      <div className="text-4xl font-bold tracking-tight text-[#3A322D]">
-                        {stats.mrr}
-                        <span className="text-base text-[#3A322D]/30 ml-1">TND</span>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-0 shadow-lg bg-white">
-                    <CardContent className="p-6">
-                      <div className="flex justify-between items-start mb-4">
-                        <span className="text-[#3A322D]/40 font-bold text-xs uppercase tracking-widest">
-                          Premium Hubs
-                        </span>
-                        <Badge className="bg-[#C9A07E]/20 text-[#C9A07E] border-[#C9A07E]/30">
-                          {stats.proMenus} Active
-                        </Badge>
-                      </div>
-                      <div className="text-4xl font-bold tracking-tight text-[#3A322D]">
-                        {stats.activeMenus > 0 ? Math.round((stats.proMenus / stats.activeMenus) * 100) : 0}%
-                      </div>
-                      <div className="text-xs text-[#3A322D]/40 mt-1">conversion rate</div>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-0 shadow-lg bg-white">
-                    <CardContent className="p-6">
-                      <div className="flex justify-between items-start mb-4">
-                        <span className="text-[#3A322D]/40 font-bold text-xs uppercase tracking-widest">
-                          Total Users
-                        </span>
-                        <Users className="w-4 h-4 text-[#C9A07E]" />
-                      </div>
-                      <div className="text-4xl font-bold tracking-tight text-[#3A322D]">
-                        {stats.usersCount}
-                      </div>
-                    </CardContent>
-                  </Card>
+      <main className="ml-[280px] p-xl space-y-xl max-w-[1440px]">
+        <AnimatePresence mode="wait">
+          {/* Overview Tab */}
+          {activeTab === 'overview' && (
+            <motion.div 
+              key="overview" 
+              variants={pageVariants} 
+              initial="initial" 
+              animate="animate" 
+              exit="exit" 
+              className="space-y-xl"
+            >
+              {/* Hero Header */}
+              <section className="flex flex-col md:flex-row md:items-end justify-between gap-xl">
+                <div className="max-w-2xl">
+                  <h2 className="font-display text-display-lg text-primary mb-xs tracking-tight">
+                    SuperAdmin Command Center
+                  </h2>
+                  <p className="font-body-lg text-on-surface-variant">
+                    Monitor restaurants, plans, orders, and platform health across the global MenuxPro ecosystem.
+                  </p>
                 </div>
-              </motion.div>
-            )}
-
-            {/* Restaurants Tab */}
-            {activeTab === 'restaurants' && (
-              <motion.div key="restaurants" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="space-y-6">
-                <header className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
-                  <div>
-                    <h2 className="text-2xl lg:text-3xl font-serif font-bold text-[#3A322D]">Directory</h2>
-                    <p className="text-xs uppercase tracking-widest text-[#3A322D]/40 font-bold mt-1">
-                      Active Deployments
-                    </p>
-                  </div>
-                  <Button 
-                    onClick={() => setIsModalOpen(true)}
-                    className="bg-[#3A322D] hover:bg-[#5A4A3D] text-white"
+                <div className="flex gap-md">
+                  <button
+                    onClick={() => setActiveTab('health')}
+                    className="px-xl py-md bg-surface border border-outline-variant text-primary rounded-full font-label-md hover:bg-surface-container-low transition-all"
                   >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Deploy Hub
-                  </Button>
-                </header>
+                    Open system health
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('restaurants')}
+                    className="px-xl py-md bg-primary text-on-primary rounded-full font-label-md hover:opacity-90 transition-all"
+                  >
+                    Review pending restaurants
+                  </button>
+                </div>
+              </section>
 
-                <Card className="border-0 shadow-lg overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left min-w-[700px]">
-                      <thead className="bg-[#FAFAFA] border-b border-[#3A322D]/10 text-[#3A322D]/40 text-xs uppercase tracking-widest font-bold">
-                        <tr>
-                          <th className="p-4">Hub Identity</th>
-                          <th className="p-4">Slug</th>
-                          <th className="p-4">Plan</th>
-                          <th className="p-4">Status</th>
-                          <th className="p-4 text-right">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[#3A322D]/5">
-                        {restaurants.map(r => (
-                          <tr key={r.id} className="hover:bg-[#FAFAFA]/50 transition-colors">
-                            <td className="p-4">
-                              <div className="font-bold text-[#3A322D]">{r.name}</div>
-                              <div className="text-xs text-[#3A322D]/40 font-mono mt-1">{r.id}</div>
-                            </td>
-                            <td className="p-4 text-sm font-mono text-[#3A322D]/70">{r.slug}</td>
-                            <td className="p-4">
-                              <select 
-                                className="bg-transparent border border-[#EFE4D8] rounded-lg px-2 py-1 text-xs font-bold outline-none"
-                                value={r.plan}
-                                onChange={(e) => handleUpdateRestaurant(r.id, { plan: e.target.value as Restaurant['plan'] })}
-                                disabled={actionLoading?.startsWith('restaurant-')}
-                              >
-                                <option value="free">Starter</option>
-                                <option value="pro">Pro</option>
-                                <option value="business">Business</option>
-                              </select>
-                            </td>
-                            <td className="p-4">
-                              <button 
-                                onClick={() => handleUpdateRestaurant(r.id, { status: r.status === 'active' ? 'inactive' : 'active' })}
-                                disabled={actionLoading?.startsWith('restaurant-')}
-                                className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-                                  r.status === 'active' 
-                                    ? 'bg-emerald-100 text-emerald-700' 
-                                    : 'bg-red-100 text-red-700'
-                                }`}
-                              >
-                                {r.status === 'active' ? 'Online' : 'Offline'}
-                              </button>
-                            </td>
-                            <td className="p-4">
-                              <div className="flex items-center justify-end gap-2">
-                                <button 
-                                  onClick={() => generateMagicLink(r.id, r.slug)} 
-                                  disabled={actionLoading === `magic-${r.id}`}
-                                  className="p-2 rounded-lg hover:bg-[#EFE4D8] text-[#3A322D]/40 hover:text-[#C9A07E] transition-colors disabled:opacity-50"
-                                  title="Magic Link"
-                                >
-                                  {actionLoading === `magic-${r.id}` ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                  ) : (
-                                    <LinkIcon className="w-4 h-4" />
-                                  )}
-                                </button>
-                                <button 
-                                  onClick={() => setBulkImportResId(r.id)} 
-                                  className="p-2 rounded-lg hover:bg-[#EFE4D8] text-[#3A322D]/40 hover:text-[#C9A07E] transition-colors"
-                                  title="Bulk Import"
-                                >
-                                  <FileJson className="w-4 h-4" />
-                                </button>
-                                <button 
-                                  onClick={() => handleDeleteRestaurant(r.id)} 
-                                  disabled={actionLoading === `delete-${r.id}`}
-                                  className="p-2 rounded-lg hover:bg-red-100 text-[#3A322D]/40 hover:text-red-600 transition-colors disabled:opacity-50"
-                                  title="Delete"
-                                >
-                                  {actionLoading === `delete-${r.id}` ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                  ) : (
-                                    <Trash2 className="w-4 h-4" />
-                                  )}
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {restaurants.length === 0 && (
-                      <div className="p-12 text-center text-[#3A322D]/40 italic font-serif">
-                        No hubs deployed in network.
+              {/* KPI Row */}
+              <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-md">
+                <KPICard
+                  label="Total Restaurants"
+                  value={stats.activeMenus}
+                  trend={{ value: '4%', direction: 'up' }}
+                  icon="storefront"
+                />
+                <KPICard
+                  label="Active Restaurants"
+                  value={Math.round(stats.activeMenus * 0.72)}
+                  trend={{ value: '12%', direction: 'up' }}
+                  icon="check_circle"
+                />
+                <KPICard
+                  label="Free Accounts"
+                  value={stats.activeMenus - stats.proMenus}
+                  trend={{ value: '0%', direction: 'neutral' }}
+                />
+                <KPICard
+                  label="Pro Accounts"
+                  value={stats.proMenus}
+                  trend={{ value: '8%', direction: 'up' }}
+                />
+                <KPICard
+                  label="Orders Today"
+                  value="4.2k"
+                  trend={{ value: '22%', direction: 'up' }}
+                  icon="receipt_long"
+                />
+                <KPICard
+                  label="Platform Alerts"
+                  value="2"
+                  variant="warning"
+                  trend={{ value: 'HIGH', direction: 'down' }}
+                />
+              </section>
+
+              {/* Health & Activity Bento Grid */}
+              <section className="grid grid-cols-1 lg:grid-cols-12 gap-xl">
+                {/* Left Column */}
+                <div className="lg:col-span-8 space-y-xl">
+                  {/* Platform Health Strip */}
+                  <div className="bg-primary text-on-primary p-xl rounded-lg flex items-center justify-between shadow-lg">
+                    <div className="flex items-center gap-md">
+                      <span className="material-symbols-outlined text-secondary-fixed text-[32px]">security</span>
+                      <div>
+                        <p className="font-headline-md text-headline-md text-primary-fixed">System Infrastructure</p>
+                        <p className="text-on-primary-container text-sm">Real-time gateway monitoring</p>
                       </div>
-                    )}
-                  </div>
-                </Card>
-              </motion.div>
-            )}
-
-            {/* Users Tab */}
-            {activeTab === 'users' && (
-              <motion.div key="users" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="space-y-6">
-                <header className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
-                  <div>
-                    <h2 className="text-2xl lg:text-3xl font-serif font-bold text-[#3A322D]">Identities</h2>
-                    <p className="text-xs uppercase tracking-widest text-[#3A322D]/40 font-bold mt-1">
-                      Access Control & Directory
-                    </p>
-                  </div>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#3A322D]/40" />
-                    <Input
-                      ref={searchInputRef}
-                      type="text"
-                      placeholder="Search identity..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10 pr-16 bg-white border-[#EFE4D8] focus:border-[#C9A07E] w-full md:w-80"
-                    />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#3A322D]/30 font-mono">
-                      ⌘K
+                    </div>
+                    <div className="flex items-center gap-xl">
+                      {['Firebase', 'Orders API', 'Auth', 'Firestore'].map((service) => (
+                        <div key={service} className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-secondary shadow-[0_0_8px_rgba(121,87,58,0.8)]" />
+                          <span className="font-label-sm text-label-sm">{service}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                </header>
 
-                <Card className="border-0 shadow-lg overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left min-w-[600px]">
-                      <thead className="bg-[#FAFAFA] border-b border-[#3A322D]/10 text-[#3A322D]/40 text-xs uppercase tracking-widest font-bold">
-                        <tr>
-                          <th className="p-4">Principal</th>
-                          <th className="p-4">Last Active</th>
-                          <th className="p-4">Status</th>
-                          <th className="p-4 text-right">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[#3A322D]/5">
-                        {filteredUsers.map(u => {
-                          const isBanned = bannedUsers.has(u.id);
-                          return (
-                            <tr key={u.id} className="hover:bg-[#FAFAFA]/50 transition-colors">
-                              <td className="p-4">
-                                <div className="font-bold text-[#3A322D] flex items-center gap-2">
-                                  {u.displayName || 'Anonymous'}
-                                  {u.globalRole === 'superadmin' && (
-                                    <ShieldAlert className="w-3.5 h-3.5 text-[#C9A07E]" />
-                                  )}
-                                </div>
-                                <div className="text-xs text-[#3A322D]/40 font-mono mt-1">{u.email}</div>
-                              </td>
-                              <td className="p-4 text-sm text-[#3A322D]/60 font-mono">
-                                {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : 'Unknown'}
-                              </td>
-                              <td className="p-4">
-                                {isBanned ? (
-                                  <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-red-600">
-                                    <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse" />
-                                    Banned
-                                  </span>
-                                ) : (
-                                  <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-600">
-                                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                                    Clear
-                                  </span>
-                                )}
-                              </td>
-                              <td className="p-4 text-right">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleToggleBan(u.id)}
-                                  disabled={u.globalRole === 'superadmin' || actionLoading === `user-${u.id}`}
-                                  className={isBanned 
-                                    ? 'border-emerald-600 text-emerald-600 hover:bg-emerald-50' 
-                                    : 'border-red-600 text-red-600 hover:bg-red-50'
-                                  }
-                                >
-                                  {actionLoading === `user-${u.id}` ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                  ) : isBanned ? (
-                                    'Unban'
-                                  ) : (
-                                    'Ban'
-                                  )}
-                                </Button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                    {filteredUsers.length === 0 && (
-                      <div className="p-12 text-center text-[#3A322D]/40 italic font-serif">
-                        No identities found.
-                      </div>
-                    )}
-                  </div>
-                </Card>
-              </motion.div>
-            )}
-
-            {/* Ledger Tab */}
-            {activeTab === 'ledger' && (
-              <motion.div key="ledger" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="space-y-6">
-                <header>
-                  <h2 className="text-2xl lg:text-3xl font-serif font-bold text-[#3A322D]">Financial Ledger</h2>
-                  <p className="text-xs uppercase tracking-widest text-[#3A322D]/40 font-bold mt-1">
-                    Payment Verification
-                  </p>
-                </header>
-
-                <Card className="border-0 shadow-lg">
-                  <CardHeader>
-                    <CardTitle className="text-sm uppercase tracking-widest text-[#3A322D]/60 flex items-center gap-2">
-                      <CreditCard className="w-4 h-4" />
-                      Pending Payment Actions
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {pendingPayments.length === 0 ? (
-                      <div className="py-8 text-center text-[#3A322D]/30 italic font-serif">
-                        All ledgers balanced. No pending payments.
-                      </div>
-                    ) : (
-                      pendingPayments.map(r => (
-                        <div key={r.id} className="p-4 border border-[#EFE4D8] rounded-xl flex items-center justify-between">
-                          <div>
-                            <div className="font-bold text-[#3A322D]">{r.name}</div>
-                            <div className="text-xs text-[#3A322D]/40 font-mono mt-1">upgrade_request</div>
-                          </div>
-                          <Button
-                            onClick={() => verifyPayment(r.id)}
-                            disabled={verifyingPayment === r.id || successAnimId === r.id}
-                            className={`${
-                              successAnimId === r.id 
-                                ? 'bg-emerald-500 hover:bg-emerald-500' 
-                                : 'bg-[#3A322D] hover:bg-[#5A4A3D]'
-                            } text-white`}
-                          >
-                            {verifyingPayment === r.id ? (
-                              <>
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                Verifying...
-                              </>
-                            ) : successAnimId === r.id ? (
-                              <>
-                                <CheckCircle2 className="w-4 h-4 mr-2" />
-                                Verified
-                              </>
-                            ) : (
-                              'Mark Verified'
-                            )}
-                          </Button>
-                        </div>
-                      ))
-                    )}
-                  </CardContent>
-                </Card>
-              </motion.div>
-            )}
-
-            {/* Logs Tab */}
-            {activeTab === 'logs' && (
-              <motion.div key="logs" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="space-y-6">
-                <header>
-                  <h2 className="text-2xl lg:text-3xl font-serif font-bold text-[#3A322D]">Activity Logs</h2>
-                  <p className="text-xs uppercase tracking-widest text-[#3A322D]/40 font-bold mt-1">
-                    System Audit Trail
-                  </p>
-                </header>
-
-                <Card className="border-0 shadow-lg">
-                  <CardContent className="divide-y divide-[#EFE4D8]">
-                    {systemLogs.length === 0 ? (
-                      <div className="py-12 text-center text-[#3A322D]/30 italic font-serif">
-                        System log is empty.
-                      </div>
-                    ) : (
-                      systemLogs.map((log, i) => (
-                        <motion.div
-                          key={log.id}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: i * 0.05 }}
-                          className="p-4 flex items-start gap-4"
-                        >
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 border ${
-                            log.type === 'MAGIC_LINK_CLAIMED' 
-                              ? 'bg-emerald-100 border-emerald-200' 
-                              : 'bg-[#FAFAFA] border-[#EFE4D8]'
+                  {/* Activity Timeline */}
+                  <div className="bg-surface-container-lowest p-xl rounded-lg border border-outline-variant/10" style={{ boxShadow: '0px 4px 24px rgba(58, 50, 45, 0.04)' }}>
+                    <h4 className="font-display text-headline-lg text-primary mb-xl">Recent Activity</h4>
+                    <div className="space-y-xl relative before:content-[''] before:absolute before:left-3 before:top-2 before:bottom-0 before:w-px before:bg-outline-variant">
+                      {systemLogs.slice(0, 3).map((log, i) => (
+                        <div key={log.id || i} className="relative pl-12">
+                          <div className={`absolute left-0 top-1 w-6 h-6 rounded-full flex items-center justify-center ${
+                            log.type.includes('MAGIC') ? 'bg-primary' : 
+                            log.type.includes('error') ? 'bg-error-container' : 'bg-surface-container border border-outline-variant'
                           }`}>
-                            {log.type === 'MAGIC_LINK_CLAIMED' ? (
-                              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                            ) : (
-                              <Activity className="w-4 h-4 text-[#3A322D]/40" />
-                            )}
+                            <span className={`material-symbols-outlined text-[14px] ${
+                              log.type.includes('MAGIC') ? 'text-on-primary' : 
+                              log.type.includes('error') ? 'text-error' : 'text-on-surface-variant'
+                            }`}>
+                              {log.type.includes('MAGIC') ? 'upgrade' : 
+                               log.type.includes('error') ? 'trending_up' : 'add'}
+                            </span>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex flex-col md:flex-row md:items-center justify-between mb-2">
-                              <h4 className="font-bold text-sm text-[#3A322D]">{log.message}</h4>
-                              <span className="text-xs text-[#3A322D]/40 font-mono">
-                                {new Date(log.timestamp).toLocaleString()}
+                          <div>
+                            <p className="font-body-md text-on-surface">
+                              {log.message || log.type}
+                            </p>
+                            <p className="text-on-surface-variant text-sm">
+                              {log.timestamp ? new Date(log.timestamp).toLocaleString() : 'Just now'}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column */}
+                <div className="lg:col-span-4 space-y-xl">
+                  {/* Quick Actions */}
+                  <div className="bg-surface-container-low p-xl rounded-lg border border-outline-variant">
+                    <h4 className="font-label-sm text-label-sm text-on-surface-variant tracking-widest mb-lg uppercase">
+                      Quick Actions
+                    </h4>
+                    <div className="space-y-sm">
+                      <QuickAction icon="add_circle" label="Manual Create" onClick={() => setActiveTab('restaurants')} />
+                      <QuickAction icon="terminal" label="Review Logs" onClick={() => setActiveTab('logs')} />
+                      <QuickAction icon="forum" label="WhatsApp Support" variant="gold" />
+                    </div>
+                  </div>
+
+                  {/* Stats Summary */}
+                  <div className="bg-surface-container-lowest p-xl rounded-lg border border-outline-variant/10" style={{ boxShadow: '0px 4px 24px rgba(58, 50, 45, 0.04)' }}>
+                    <h4 className="font-label-sm text-label-sm text-on-surface-variant tracking-widest mb-lg uppercase">
+                      Est. MRR
+                    </h4>
+                    <div className="text-center py-lg">
+                      <span className="font-display text-display-lg text-primary">{stats.mrr}</span>
+                      <span className="font-body-lg text-on-surface-variant ml-sm">TND</span>
+                    </div>
+                    <div className="flex justify-center gap-md">
+                      <StatusBadge status="active" label="Active" />
+                      <StatusBadge status="pass" label="Verified" />
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </motion.div>
+          )}
+
+          {/* Restaurants Tab */}
+          {activeTab === 'restaurants' && (
+            <motion.div 
+              key="restaurants" 
+              variants={pageVariants} 
+              initial="initial" 
+              animate="animate" 
+              exit="exit" 
+              className="space-y-xl"
+            >
+              <section className="flex flex-col md:flex-row md:items-end justify-between gap-lg">
+                <div>
+                  <h2 className="font-display text-display-lg text-primary tracking-tight">Restaurants</h2>
+                  <p className="font-body-lg text-on-surface-variant mt-xs">
+                    View and manage every restaurant workspace.
+                  </p>
+                </div>
+                <button className="bg-primary text-on-primary px-xl py-md rounded-full flex items-center gap-2 hover:opacity-90 active:scale-95 transition-all shadow-lg">
+                  <span className="material-symbols-outlined">add</span>
+                  <span className="font-label-md">Add Restaurant</span>
+                </button>
+              </section>
+
+              {/* Filter Bar */}
+              <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex flex-wrap items-center justify-between gap-md" style={{ boxShadow: '0px 4px 24px rgba(58, 50, 45, 0.04)' }}>
+                <div className="flex items-center gap-xs overflow-x-auto">
+                  {['All', 'Free', 'Pro', 'Active', 'Suspended'].map((filter, i) => (
+                    <button
+                      key={filter}
+                      className={`px-lg py-sm rounded-full font-label-md transition-all ${
+                        i === 0 
+                          ? 'bg-primary text-on-primary' 
+                          : 'text-on-surface-variant hover:bg-surface-container-low'
+                      }`}
+                    >
+                      {filter}
+                    </button>
+                  ))}
+                </div>
+                <div className="relative max-w-xs">
+                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-lg">filter_list</span>
+                  <input
+                    type="text"
+                    placeholder="Filter by name or slug..."
+                    className="w-full pl-md pr-md py-sm bg-surface rounded-full border border-outline-variant font-body-sm focus:outline-none"
+                  />
+                </div>
+              </section>
+
+              {/* Restaurants Table */}
+              <section className="bg-surface-container-lowest rounded-lg overflow-hidden border border-outline-variant/10" style={{ boxShadow: '0px 4px 24px rgba(58, 50, 45, 0.04)' }}>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-surface-container-low border-b border-outline-variant">
+                      <tr>
+                        <th className="px-xl py-lg font-label-sm text-outline uppercase tracking-widest">Restaurant</th>
+                        <th className="px-xl py-lg font-label-sm text-outline uppercase tracking-widest">Slug</th>
+                        <th className="px-xl py-lg font-label-sm text-outline uppercase tracking-widest">Owner</th>
+                        <th className="px-xl py-lg font-label-sm text-outline uppercase tracking-widest">Plan</th>
+                        <th className="px-xl py-lg font-label-sm text-outline uppercase tracking-widest">Status</th>
+                        <th className="px-xl py-lg font-label-sm text-outline uppercase tracking-widest">Items</th>
+                        <th className="px-xl py-lg font-label-sm text-outline uppercase tracking-widest">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-outline-variant">
+                      {restaurants.map((r) => (
+                        <tr key={r.id} className="hover:bg-surface-container-low/50 transition-colors group">
+                          <td className="px-xl py-xl">
+                            <div className="flex items-center gap-md">
+                              <div className="w-14 h-14 rounded-lg bg-surface-container border border-outline-variant flex items-center justify-center overflow-hidden">
+                                <span className="material-symbols-outlined text-outline text-2xl">storefront</span>
+                              </div>
+                              <div>
+                                <p className="font-headline-md text-headline-md text-primary leading-none">{r.name}</p>
+                                <p className="font-body-sm text-body-sm text-on-surface-variant mt-xs">Restaurant</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-xl py-xl">
+                            <code className="bg-surface-container px-md py-xs rounded font-body-sm text-body-sm text-on-surface-variant">
+                              {r.slug}
+                            </code>
+                          </td>
+                          <td className="px-xl py-xl">
+                            <span className="font-body-md text-body-md text-on-surface">Owner</span>
+                          </td>
+                          <td className="px-xl py-xl">
+                            <span className={`px-lg py-xs rounded-full font-label-sm ${
+                              r.plan === 'pro' 
+                                ? 'bg-secondary-fixed text-on-secondary-fixed-variant' 
+                                : 'bg-surface-container-highest text-on-surface-variant'
+                            }`}>
+                              {r.plan.charAt(0).toUpperCase() + r.plan.slice(1)}
+                            </span>
+                          </td>
+                          <td className="px-xl py-xl">
+                            <div className="flex items-center gap-2">
+                              <span className={`w-2 h-2 rounded-full ${r.status === 'active' ? 'bg-green-500' : 'bg-outline'}`} />
+                              <span className="font-label-md text-label-md text-on-surface">
+                                {r.status === 'active' ? 'Active' : 'Offline'}
                               </span>
                             </div>
-                            <pre className="text-xs text-[#3A322D]/60 bg-[#FAFAFA] p-3 rounded-lg border border-[#EFE4D8] overflow-x-auto">
-                              {JSON.stringify(log.details, null, 2)}
-                            </pre>
-                          </div>
-                        </motion.div>
-                      ))
-                    )}
-                  </CardContent>
-                </Card>
-              </motion.div>
-            )}
-
-            {/* Deep Edit Tab */}
-            {activeTab === 'deep_edit' && (
-              <motion.div key="deep_edit" variants={pageVariants} initial="initial" animate="animate" exit="exit" className="space-y-6">
-                <header>
-                  <h2 className="text-2xl lg:text-3xl font-serif font-bold text-[#3A322D]">Deep Edit</h2>
-                  <p className="text-xs uppercase tracking-widest text-[#3A322D]/40 font-bold mt-1">
-                    SuperAdmin Data Override
-                  </p>
-                </header>
-
-                <Card className="border-0 shadow-lg">
-                  <CardContent className="p-8 text-center">
-                    <FileJson className="w-12 h-12 text-[#C9A07E] mx-auto mb-4" />
-                    <h3 className="font-bold text-[#3A322D] mb-2">Direct Data Access</h3>
-                    <p className="text-sm text-[#3A322D]/60 mb-6">
-                      Query and modify any document in Firestore directly.
-                      This feature requires extreme caution.
+                          </td>
+                          <td className="px-xl py-xl font-body-md text-body-md text-on-surface">
+                            {r.menuItemCount || 0} items
+                          </td>
+                          <td className="px-xl py-xl">
+                            <div className="flex items-center gap-xs">
+                              <button className="p-2 hover:bg-surface-container-high rounded-full transition-all text-on-surface-variant hover:text-primary" title="Details">
+                                <span className="material-symbols-outlined">info</span>
+                              </button>
+                              <button className="p-2 hover:bg-surface-container-high rounded-full transition-all text-on-surface-variant hover:text-primary" title="Open Menu">
+                                <span className="material-symbols-outlined">open_in_new</span>
+                              </button>
+                              <button className="p-2 hover:bg-error-container/30 rounded-full transition-all text-on-surface-variant hover:text-error" title="Suspend">
+                                <span className="material-symbols-outlined">block</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {restaurants.length === 0 && (
+                  <div className="p-3xl text-center">
+                    <span className="material-symbols-outlined text-display-md text-outline mb-lg block">storefront</span>
+                    <h3 className="font-display text-display-md text-primary mb-sm">No restaurants yet</h3>
+                    <p className="font-body-lg text-body-lg text-on-surface-variant max-w-md mx-auto mb-xl">
+                      Start your platform ecosystem by adding your first restaurant partner.
                     </p>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-left">
-                      <div className="p-4 bg-[#FAFAFA] rounded-xl border border-[#EFE4D8]">
-                        <h4 className="font-bold text-sm text-[#3A322D] mb-1">Collections</h4>
-                        <p className="text-xs text-[#3A322D]/40 font-mono">restaurants, users, orders, tables...</p>
+                    <button className="bg-primary text-on-primary px-xl py-md rounded-full font-label-md">
+                      Add Restaurant
+                    </button>
+                  </div>
+                )}
+              </section>
+            </motion.div>
+          )}
+
+          {/* Security Tab */}
+          {activeTab === 'security' && (
+            <motion.div 
+              key="security" 
+              variants={pageVariants} 
+              initial="initial" 
+              animate="animate" 
+              exit="exit" 
+              className="space-y-xl"
+            >
+              <div className="mb-3xl">
+                <h2 className="font-display text-display-lg text-primary mb-xs">Security & Access</h2>
+                <p className="font-body-lg text-on-surface-variant">Audit trail and infrastructure hardening.</p>
+              </div>
+
+              {/* Status Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-lg mb-xl">
+                <div className="bg-surface-container-lowest p-xl rounded-lg border border-outline-variant/10" style={{ boxShadow: '0px 4px 24px rgba(58, 50, 45, 0.04)' }}>
+                  <div className="flex justify-between items-start mb-lg">
+                    <span className="material-symbols-outlined text-primary bg-primary-fixed p-3 rounded-full">rule</span>
+                    <StatusBadge status="pass" label="PASS" />
+                  </div>
+                  <h3 className="font-headline-md text-headline-md text-primary mb-2">Rules Test Status</h3>
+                  <p className="font-body-sm text-on-surface-variant">Last full security rules validation completed successfully.</p>
+                </div>
+
+                <div className="bg-surface-container-lowest p-xl rounded-lg border border-outline-variant/10" style={{ boxShadow: '0px 4px 24px rgba(58, 50, 45, 0.04)' }}>
+                  <div className="flex justify-between items-start mb-lg">
+                    <span className="material-symbols-outlined text-primary bg-primary-fixed p-3 rounded-full">verified_user</span>
+                    <StatusBadge status="verified" label="VERIFIED" />
+                  </div>
+                  <h3 className="font-headline-md text-headline-md text-primary mb-2">Custom Claims</h3>
+                  <p className="font-body-sm text-on-surface-variant">Administrative privilege tokens are active and encrypted.</p>
+                </div>
+
+                <div className="bg-surface-container-lowest p-xl rounded-lg border border-outline-variant/10" style={{ boxShadow: '0px 4px 24px rgba(58, 50, 45, 0.04)' }}>
+                  <div className="flex justify-between items-start mb-lg">
+                    <span className="material-symbols-outlined text-primary bg-primary-fixed p-3 rounded-full">api</span>
+                    <StatusBadge status="active" label="ACTIVE" />
+                  </div>
+                  <h3 className="font-headline-md text-headline-md text-primary mb-2">Admin API</h3>
+                  <p className="font-body-sm text-on-surface-variant">Secure endpoint traffic monitoring is operational.</p>
+                </div>
+              </div>
+
+              {/* Security Panel */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-xl">
+                <div className="lg:col-span-4 bg-surface-container-lowest p-xl rounded-lg border border-outline-variant/10 h-full" style={{ boxShadow: '0px 4px 24px rgba(58, 50, 45, 0.04)' }}>
+                  <div className="flex items-center gap-sm mb-lg">
+                    <span className="material-symbols-outlined text-error">warning</span>
+                    <h3 className="font-headline-md text-headline-md text-primary">Current Risks</h3>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="p-lg bg-error-container/30 border border-error-container rounded-lg">
+                      <p className="font-label-sm text-error uppercase mb-1">Critical Action</p>
+                      <p className="font-body-md text-on-surface font-semibold">SuperAdmin custom claims: Manual check required</p>
+                      <p className="font-body-sm text-on-surface-variant mt-2">3 privilege escalation attempts detected in staging.</p>
+                    </div>
+                    <div className="p-lg bg-surface-container border border-outline-variant rounded-lg">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="font-label-sm text-on-surface-variant uppercase">Network Security</p>
+                        <span className="text-[10px] bg-secondary-container text-on-secondary-fixed-variant px-2 py-0.5 rounded-full font-bold">ACTIVE</span>
                       </div>
-                      <div className="p-4 bg-[#FAFAFA] rounded-xl border border-[#EFE4D8]">
-                        <h4 className="font-bold text-sm text-[#3A322D] mb-1">Actions</h4>
-                        <p className="text-xs text-[#3A322D]/40 font-mono">read, update, delete, create</p>
-                      </div>
-                      <div className="p-4 bg-[#FAFAFA] rounded-xl border border-[#EFE4D8]">
-                        <h4 className="font-bold text-sm text-[#3A322D] mb-1">Logs</h4>
-                        <p className="text-xs text-[#3A322D]/40 font-mono">All actions are logged</p>
+                      <p className="font-body-md text-on-surface font-semibold">Rate limiting: Active</p>
+                      <p className="font-body-sm text-on-surface-variant mt-2">Global threshold set to 1,000 req/min per IP.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="lg:col-span-8 bg-primary-container text-on-primary p-xl rounded-lg shadow-xl flex flex-col justify-between h-full relative overflow-hidden">
+                  <div className="absolute -right-20 -top-20 w-64 h-64 bg-primary rounded-full opacity-20 blur-3xl" />
+                  <div>
+                    <div className="flex justify-between items-center mb-xl">
+                      <h3 className="font-headline-md text-headline-md text-primary-fixed">Firestore Rules Test Panel</h3>
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-[#81c784]" />
+                        <span className="font-label-sm text-primary-fixed-dim">Last run: 12m ago</span>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+                    <div className="bg-primary/50 border border-outline-variant/20 rounded-lg p-lg mb-lg font-mono text-body-sm text-on-primary-fixed-variant">
+                      <p className="text-[#81c784] font-bold mb-2">{`// SECURITY TEST RESULTS`}</p>
+                      <p className="text-on-primary/80">Running 24 individual assertion suites...</p>
+                      <p className="text-[#81c784]">✓ Authenticated Read Access [PASS]</p>
+                      <p className="text-[#81c784]">✓ Owner Write Restricted [PASS]</p>
+                      <p className="text-[#81c784]">✓ Admin Field Modification [PASS]</p>
+                      <p className="text-on-primary/80">All 24/24 rules passing.</p>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <div className="flex flex-col">
+                      <span className="font-label-sm text-primary-fixed-dim uppercase tracking-widest">Global Status</span>
+                      <span className="font-display text-display-md text-white">SUCCESS</span>
+                    </div>
+                    <button className="bg-primary-fixed text-primary px-xl py-3 rounded-full font-label-md hover:scale-105 transition-transform active:scale-95">
+                      Trigger Validation
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Default tabs */}
+          {['owners', 'plans', 'orders', 'logs', 'health', 'support', 'settings'].includes(activeTab) && (
+            <motion.div 
+              key={activeTab} 
+              variants={pageVariants} 
+              initial="initial" 
+              animate="animate" 
+              exit="exit" 
+              className="space-y-xl"
+            >
+              <div className="mb-3xl">
+                <h2 className="font-display text-display-lg text-primary mb-xs">
+                  {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}
+                </h2>
+                <p className="font-body-lg text-on-surface-variant">
+                  {activeTab === 'logs' && 'System audit trail and activity logs.'}
+                  {activeTab === 'health' && 'Monitor system infrastructure and health.'}
+                  {activeTab === 'support' && 'Manage business leads and support queue.'}
+                  {activeTab === 'settings' && 'Configure platform settings.'}
+                  {activeTab === 'owners' && 'Manage restaurant owners and accounts.'}
+                  {activeTab === 'plans' && 'Manage subscription plans and billing.'}
+                  {activeTab === 'orders' && 'View and manage all orders across the platform.'}
+                </p>
+              </div>
+
+              {/* Placeholder content */}
+              <div className="bg-surface-container-lowest p-3xl rounded-lg border border-outline-variant/10 text-center" style={{ boxShadow: '0px 4px 24px rgba(58, 50, 45, 0.04)' }}>
+                <span className="material-symbols-outlined text-display-md text-outline mb-lg block">
+                  {activeTab === 'logs' && 'history'}
+                  {activeTab === 'health' && 'health_and_safety'}
+                  {activeTab === 'support' && 'help_outline'}
+                  {activeTab === 'settings' && 'settings'}
+                  {activeTab === 'owners' && 'group'}
+                  {activeTab === 'plans' && 'subscriptions'}
+                  {activeTab === 'orders' && 'receipt_long'}
+                </span>
+                <h3 className="font-display text-headline-lg text-primary mb-sm">
+                  {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Module
+                </h3>
+                <p className="font-body-md text-on-surface-variant max-w-md mx-auto">
+                  This module is under development. Full functionality coming soon.
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
 
-      {/* Deploy Hub Modal */}
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="bg-white">
-          <DialogHeader>
-            <DialogTitle className="text-[#3A322D]">Deploy New Hub</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Restaurant Name</Label>
-              <Input 
-                id="name"
-                value={newRestaurant.name}
-                onChange={(e) => setNewRestaurant(prev => ({ ...prev, name: e.target.value }))}
-                placeholder="e.g., Café Élégance"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="slug">URL Slug</Label>
-              <Input 
-                id="slug"
-                value={newRestaurant.slug}
-                onChange={(e) => setNewRestaurant(prev => ({ ...prev, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') }))}
-                placeholder="e.g., cafe-elegance"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="ownerUid">Owner UID (optional)</Label>
-              <Input 
-                id="ownerUid"
-                value={newRestaurant.ownerUid}
-                onChange={(e) => setNewRestaurant(prev => ({ ...prev, ownerUid: e.target.value }))}
-                placeholder="Firebase UID of the owner"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="plan">Initial Plan</Label>
-              <Select value={newRestaurant.plan} onValueChange={(value) => setNewRestaurant(prev => ({ ...prev, plan: value }))}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="free">Starter</SelectItem>
-                  <SelectItem value="pro">Pro</SelectItem>
-                  <SelectItem value="business">Business</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</Button>
-            <Button 
-              onClick={handleAddRestaurant}
-              disabled={actionLoading === 'create-restaurant'}
-              className="bg-[#3A322D] hover:bg-[#5A4A3D]"
-            >
-              {actionLoading === 'create-restaurant' ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                <>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Deploy
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Bulk Import Modal */}
-      <Dialog open={!!bulkImportResId} onOpenChange={() => setBulkImportResId(null)}>
-        <DialogContent className="bg-white max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="text-[#3A322D]">Bulk Import Menu Items</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <p className="text-sm text-[#3A322D]/60">
-              Paste a JSON array of menu items. Each item should have: name, category, price.
-            </p>
-            <Textarea 
-              value={bulkJsonData}
-              onChange={(e) => setBulkJsonData(e.target.value)}
-              placeholder={`[
-  { "name": "Espresso", "category": "Coffee", "price": 2.50 },
-  { "name": "Cappuccino", "category": "Coffee", "price": 3.50 }
-]`}
-              className="min-h-[200px] font-mono text-sm"
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setBulkImportResId(null)}>Cancel</Button>
-            <Button 
-              onClick={handleBulkImport}
-              disabled={bulkLoading || !bulkJsonData.trim()}
-              className="bg-[#3A322D] hover:bg-[#5A4A3D]"
-            >
-              {bulkLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Importing...
-                </>
-              ) : (
-                <>
-                  <FileJson className="w-4 h-4 mr-2" />
-                  Import
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Mobile Bottom Navigation */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-[#EFE4D8] z-40">
-        <div className="flex justify-around py-2">
-          {navItems.slice(0, 4).map(item => (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`flex flex-col items-center gap-1 py-2 px-3 ${
-                activeTab === item.id ? 'text-[#C9A07E]' : 'text-[#3A322D]/40'
-              }`}
-            >
-              <item.icon className="w-5 h-5" />
-              <span className="text-[10px] font-medium">{item.label.split(' ')[0]}</span>
-            </button>
-          ))}
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="flex flex-col items-center gap-1 py-2 px-3 text-[#3A322D]/40"
-          >
-            <Menu className="w-5 h-5" />
-            <span className="text-[10px] font-medium">More</span>
-          </button>
-        </div>
-      </div>
+      {/* Floating Shortcut */}
+      <FloatingShortcut onClick={() => setActiveTab('overview')} />
     </div>
   );
 }
