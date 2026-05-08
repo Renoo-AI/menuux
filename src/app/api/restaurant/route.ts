@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
+import { verifySuperAdmin, getAdminApp as getSharedAdminApp } from '@/lib/admin-auth';
 
 // Initialize Firebase Admin
 function getAdminApp() {
@@ -26,10 +27,8 @@ function getAdminApp() {
   });
 }
 
-const SUPERADMIN_UID = process.env.NEXT_PUBLIC_SUPERADMIN_UID || '';
-
 // Verify auth token from header
-async function verifyAuth(request: NextRequest): Promise<{ uid: string; email: string } | null> {
+async function verifyAuth(request: NextRequest): Promise<{ uid: string; email: string; isSuperadmin: boolean } | null> {
   const authHeader = request.headers.get('authorization');
   if (!authHeader?.startsWith('Bearer ')) {
     return null;
@@ -41,21 +40,23 @@ async function verifyAuth(request: NextRequest): Promise<{ uid: string; email: s
     const app = getAdminApp();
     const auth = getAuth(app);
     const decoded = await auth.verifyIdToken(token);
-    return { uid: decoded.uid, email: decoded.email || '' };
+    
+    // Check for superadmin via custom claim or fallback UID
+    const FALLBACK_UID = process.env.NEXT_PUBLIC_SUPERADMIN_UID || '';
+    const isSuperadmin = decoded.role === 'superadmin' || decoded.uid === FALLBACK_UID;
+    
+    return { 
+      uid: decoded.uid, 
+      email: decoded.email || '',
+      isSuperadmin,
+    };
   } catch {
     return null;
   }
 }
 
-// Check if user is superadmin
-function isSuperadmin(uid: string): boolean {
-  return uid === SUPERADMIN_UID;
-}
-
 // Check if user has access to restaurant
 async function hasRestaurantAccess(db: ReturnType<typeof getFirestore>, uid: string, restaurantId: string): Promise<boolean> {
-  if (isSuperadmin(uid)) return true;
-  
   const doc = await db.collection('restaurants').doc(restaurantId).get();
   if (!doc.exists) return false;
   
@@ -96,7 +97,7 @@ export async function GET(request: NextRequest) {
       }
       
       // Check access
-      if (!isSuperadmin(user.uid)) {
+      if (!user.isSuperadmin) {
         const data = doc.data();
         if (data?.ownerUid !== user.uid && !data?.staffUids?.[user.uid]) {
           return NextResponse.json({ error: 'Access denied' }, { status: 403 });
@@ -144,7 +145,7 @@ export async function GET(request: NextRequest) {
     }
     
     // List all restaurants for admin/owner
-    if (isSuperadmin(user.uid)) {
+    if (user.isSuperadmin) {
       const snapshot = await db.collection('restaurants').get();
       const restaurants = snapshot.docs.map(doc => ({
         id: doc.id,
@@ -189,14 +190,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Valid name is required (max 100 chars)' }, { status: 400 });
     }
     
+    // SECURITY: Only superadmin can create non-free plan restaurants
+    if (plan !== 'free' && !user.isSuperadmin) {
+      return NextResponse.json({ error: 'Only administrators can create Pro plan restaurants' }, { status: 403 });
+    }
+    
     const app = getAdminApp();
     const db = getFirestore(app);
     
     // Determine slug
     let finalSlug = slug?.toLowerCase().trim();
     
-    if (plan === 'free' || !finalSlug) {
-      // Generate random slug for free plan
+    // SECURITY: Free plan MUST use auto-generated slug
+    if (plan === 'free') {
+      finalSlug = generateFreeSlug();
+    } else if (!finalSlug) {
       finalSlug = generateFreeSlug();
     }
     
@@ -216,9 +224,9 @@ export async function POST(request: NextRequest) {
       name,
       status: 'ACTIVE',
       currency,
-      plan,
+      plan, // Already validated above
       slugType: plan === 'free' ? 'free-random' : 'custom',
-      watermarkEnabled: plan === 'free',
+      watermarkEnabled: plan === 'free', // SECURITY: Free plan MUST have watermark
       maxMenuItems: plan === 'free' ? 8 : 999,
       menuItemCount: 0, // Counter for Firestore rules enforcement
       ownerUid: user.uid,
@@ -255,7 +263,27 @@ export async function PUT(request: NextRequest) {
     }
     
     const body = await request.json();
-    const { id, name, status, currency, cuisineType, address, phone, email, logoUrl, branding, openingHours } = body;
+    // SECURITY: Explicitly reject restricted fields from owners
+    const { 
+      id, 
+      name, 
+      status, 
+      currency, 
+      cuisineType, 
+      address, 
+      phone, 
+      email, 
+      logoUrl, 
+      branding, 
+      openingHours,
+      // These fields are NOT allowed for owners
+      plan,
+      maxMenuItems,
+      menuItemCount,
+      watermarkEnabled,
+      slug,
+      slugType,
+    } = body;
     
     if (!id) {
       return NextResponse.json({ error: 'Restaurant ID is required' }, { status: 400 });
@@ -265,13 +293,32 @@ export async function PUT(request: NextRequest) {
     const db = getFirestore(app);
     
     // Check ownership
-    if (!await hasRestaurantAccess(db, user.uid, id)) {
+    if (!user.isSuperadmin && !await hasRestaurantAccess(db, user.uid, id)) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
     
     const docRef = db.collection('restaurants').doc(id);
     const doc = await docRef.get();
     const existingData = doc.data();
+    
+    // SECURITY: Reject attempts to modify restricted fields (owners only)
+    if (!user.isSuperadmin) {
+      if (plan !== undefined) {
+        return NextResponse.json({ error: 'Cannot modify plan. Contact support to upgrade.' }, { status: 403 });
+      }
+      if (maxMenuItems !== undefined) {
+        return NextResponse.json({ error: 'Cannot modify menu item limit.' }, { status: 403 });
+      }
+      if (menuItemCount !== undefined) {
+        return NextResponse.json({ error: 'Cannot modify menu item count.' }, { status: 403 });
+      }
+      if (slug !== undefined || slugType !== undefined) {
+        return NextResponse.json({ error: 'Cannot modify slug. Contact support to change your URL.' }, { status: 403 });
+      }
+      if (watermarkEnabled !== undefined && existingData?.plan === 'free') {
+        return NextResponse.json({ error: 'Free plan requires watermark. Upgrade to Pro to remove it.' }, { status: 403 });
+      }
+    }
     
     // Prepare update data (only allowed fields)
     const updateData: Record<string, unknown> = {
@@ -302,6 +349,26 @@ export async function PUT(request: NextRequest) {
       updateData.openingHours = openingHours;
     }
     
+    // SECURITY: Superadmin-only fields
+    if (user.isSuperadmin) {
+      if (plan && ['free', 'pro', 'business'].includes(plan)) {
+        updateData.plan = plan;
+        // Update related fields when plan changes
+        if (plan === 'free') {
+          updateData.watermarkEnabled = true;
+          updateData.maxMenuItems = 8;
+        } else {
+          updateData.maxMenuItems = 999;
+        }
+      }
+      if (watermarkEnabled !== undefined) {
+        updateData.watermarkEnabled = Boolean(watermarkEnabled);
+      }
+      if (maxMenuItems !== undefined) {
+        updateData.maxMenuItems = Math.max(1, Math.min(999, Number(maxMenuItems)));
+      }
+    }
+    
     await docRef.update(updateData);
     
     return NextResponse.json({ success: true });
@@ -319,7 +386,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
-    if (!isSuperadmin(user.uid)) {
+    if (!user.isSuperadmin) {
       return NextResponse.json({ error: 'Only superadmin can delete restaurants' }, { status: 403 });
     }
     

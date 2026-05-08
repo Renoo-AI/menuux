@@ -2,8 +2,8 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { StaffSession, StaffRole } from '@/types';
-import { SUPERADMIN_UID, auth } from '@/lib/firebase';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { SUPERADMIN_UID, auth, isSuperadminFromClaims } from '@/lib/firebase';
+import { onAuthStateChanged, User, getIdTokenResult } from 'firebase/auth';
 
 interface StaffSessionContextType {
   session: StaffSession | null;
@@ -34,31 +34,59 @@ export function StaffSessionProvider({ children }: { children: React.ReactNode }
   const [session, setSession] = useState<StaffSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
+  const [isSuperadminState, setIsSuperadminState] = useState(false);
 
-  // SECURITY: isSuperadmin is derived ONLY from Firebase Auth UID verification
-  // NEVER trust localStorage or client-provided data for superadmin status
-  const isSuperadmin = firebaseUser?.uid === SUPERADMIN_UID;
+  // SECURITY: isSuperadmin is derived from Firebase Auth:
+  // 1. Primary: Custom claim 'role: superadmin' in the ID token
+  // 2. Fallback: UID comparison during migration period
+  // NEVER trust localStorage for superadmin status
+  const isSuperadmin = isSuperadminState;
 
   // Sync with Firebase Auth state - this is the ONLY source of truth for superadmin
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
       
-      // SECURITY: If user is superadmin via Firebase Auth, create an in-memory session
-      // This session is derived from Firebase Auth, NOT from localStorage
-      if (user && user.uid === SUPERADMIN_UID) {
-        const superadminSession: StaffSession = {
-          restaurantId: 'all',
-          restaurantSlug: 'admin',
-          restaurantName: 'MenuxPro Admin',
-          staffId: user.uid,
-          staffName: user.displayName || user.email?.split('@')[0] || 'Super Admin',
-          role: 'admin',
-        };
-        
-        setSession(superadminSession);
-      } else if (!user) {
+      if (user) {
+        try {
+          // Get the ID token result to check custom claims
+          const tokenResult = await getIdTokenResult(user);
+          
+          // Check for superadmin status via custom claim (primary)
+          const hasSuperadminClaim = isSuperadminFromClaims(tokenResult);
+          
+          // Fallback: Check UID during migration period
+          const isFallbackSuperadmin = user.uid === SUPERADMIN_UID;
+          
+          const isActuallySuperadmin = hasSuperadminClaim || isFallbackSuperadmin;
+          
+          setIsSuperadminState(isActuallySuperadmin);
+          
+          // SECURITY: If user is superadmin, create an in-memory session
+          // This session is derived from Firebase Auth, NOT from localStorage
+          if (isActuallySuperadmin) {
+            const superadminSession: StaffSession = {
+              restaurantId: 'all',
+              restaurantSlug: 'admin',
+              restaurantName: 'MenuxPro Admin',
+              staffId: user.uid,
+              staffName: user.displayName || user.email?.split('@')[0] || 'Super Admin',
+              role: 'admin',
+            };
+            
+            setSession(superadminSession);
+          } else {
+            // Not superadmin - clear session if it was a superadmin session
+            setSession(null);
+          }
+        } catch (error) {
+          console.error('Error checking superadmin status:', error);
+          setIsSuperadminState(false);
+          setSession(null);
+        }
+      } else {
         // User signed out - clear session
+        setIsSuperadminState(false);
         setSession(null);
       }
     });
@@ -166,9 +194,14 @@ export function StaffSessionProvider({ children }: { children: React.ReactNode }
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
-      // SECURITY: Check if this is the superadmin using Firebase UID
-      // This is the ONLY check that matters - localStorage is NOT trusted
-      if (user.uid === SUPERADMIN_UID) {
+      // SECURITY: Check if this is the superadmin
+      // Primary: Custom claim 'role: superadmin'
+      // Fallback: UID comparison during migration
+      const tokenResult = await getIdTokenResult(user);
+      const hasSuperadminClaim = isSuperadminFromClaims(tokenResult);
+      const isFallbackSuperadmin = user.uid === SUPERADMIN_UID;
+      
+      if (hasSuperadminClaim || isFallbackSuperadmin) {
         // Session will be created by onAuthStateChanged listener
         return { success: true };
       }

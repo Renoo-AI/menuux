@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
+import { checkRateLimit, rateLimitResponse, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 
 // Initialize Firebase Admin
 function getAdminApp() {
@@ -36,6 +37,16 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { restaurantId, tableId, items, customerName, notes } = body;
+    
+    // Rate limit by restaurant + table (prevent order spam)
+    if (restaurantId && tableId) {
+      const rateLimitKey = `${restaurantId}:${tableId}`;
+      const rateLimitResult = checkRateLimit(rateLimitKey, RATE_LIMIT_CONFIGS.orders);
+      
+      if (!rateLimitResult.allowed) {
+        return rateLimitResponse(rateLimitResult.retryAfter);
+      }
+    }
     
     // Validate required fields
     if (!restaurantId || !tableId || !items || !Array.isArray(items) || items.length === 0) {

@@ -103,6 +103,7 @@ export function SecurityDashboard() {
   const [logFilter, setLogFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isConfigured, setIsConfigured] = useState(false);
   const [actionDialog, setActionDialog] = useState<{
     type: 'kick' | 'ban' | 'unban' | 'liftKick';
     device?: BannedDevice | KickedDevice;
@@ -110,6 +111,11 @@ export function SecurityDashboard() {
 
   const { kickDevice, liftKick, banDevice, unbanDevice, isProcessing } = useSecurityActions();
   const { session } = useStaffSession();
+
+  // Check if security features are configured
+  useEffect(() => {
+    setIsConfigured(securityService.isSecurityConfigured());
+  }, []);
 
   // Fetch security data
   useEffect(() => {
@@ -188,6 +194,25 @@ export function SecurityDashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Not Configured Warning */}
+      {!isConfigured && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-6">
+          <div className="flex items-start gap-4">
+            <AlertTriangle className="h-6 w-6 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-semibold text-amber-800 dark:text-amber-200">Security Features Not Configured</h3>
+              <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                Advanced security features (device ban, kick, security logs) require Firebase Functions to be deployed.
+                Contact your administrator to enable these features.
+              </p>
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                Basic rate limiting is still active on API endpoints.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Loading State */}
       {isLoading && logs.length === 0 && bannedDevices.length === 0 && kickedDevices.length === 0 && (
         <div className="flex items-center justify-center py-12">

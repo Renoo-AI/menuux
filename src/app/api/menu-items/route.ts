@@ -21,23 +21,28 @@ function getAdminApp() {
   });
 }
 
-const SUPERADMIN_UID = process.env.NEXT_PUBLIC_SUPERADMIN_UID || '';
+// Fallback UID during migration
+const FALLBACK_SUPERADMIN_UID = process.env.NEXT_PUBLIC_SUPERADMIN_UID || '';
 
-async function verifyAuth(request: NextRequest): Promise<{ uid: string } | null> {
+async function verifyAuth(request: NextRequest): Promise<{ uid: string; isSuperadmin: boolean } | null> {
   const authHeader = request.headers.get('authorization');
   if (!authHeader?.startsWith('Bearer ')) return null;
   
   try {
     const app = getAdminApp();
     const decoded = await getAuth(app).verifyIdToken(authHeader.substring(7));
-    return { uid: decoded.uid };
+    
+    // Check for superadmin via custom claim or fallback UID
+    const isSuperadmin = decoded.role === 'superadmin' || decoded.uid === FALLBACK_SUPERADMIN_UID;
+    
+    return { uid: decoded.uid, isSuperadmin };
   } catch {
     return null;
   }
 }
 
-async function hasRestaurantAccess(db: ReturnType<typeof getFirestore>, uid: string, restaurantId: string): Promise<boolean> {
-  if (uid === SUPERADMIN_UID) return true;
+async function hasRestaurantAccess(db: ReturnType<typeof getFirestore>, uid: string, restaurantId: string, isSuperadmin: boolean): Promise<boolean> {
+  if (isSuperadmin) return true;
   const doc = await db.collection('restaurants').doc(restaurantId).get();
   if (!doc.exists) return false;
   const data = doc.data();
@@ -129,7 +134,7 @@ export async function POST(request: NextRequest) {
     
     const db = getFirestore(getAdminApp());
     
-    if (!await hasRestaurantAccess(db, user.uid, restaurantId)) {
+    if (!await hasRestaurantAccess(db, user.uid, restaurantId, user.isSuperadmin)) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
     
@@ -214,7 +219,7 @@ export async function PUT(request: NextRequest) {
     }
     
     const data = doc.data();
-    if (!await hasRestaurantAccess(db, user.uid, data?.restaurantId)) {
+    if (!await hasRestaurantAccess(db, user.uid, data?.restaurantId, user.isSuperadmin)) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
     
@@ -274,7 +279,7 @@ export async function DELETE(request: NextRequest) {
     }
     
     const data = doc.data();
-    if (!await hasRestaurantAccess(db, user.uid, data?.restaurantId)) {
+    if (!await hasRestaurantAccess(db, user.uid, data?.restaurantId, user.isSuperadmin)) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
     

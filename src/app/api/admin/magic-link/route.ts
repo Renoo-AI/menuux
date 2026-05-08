@@ -1,46 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeApp, getApps, getApp } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { randomUUID } from 'crypto';
-
-// Initialize Firebase Admin SDK
-let adminApp: ReturnType<typeof initializeApp> | null = null;
-
-function getAdminApp() {
-  if (adminApp) return adminApp;
-  if (getApps().length > 0) {
-    adminApp = getApp();
-    return adminApp;
-  }
-  adminApp = initializeApp({
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'menuxtn',
-  });
-  return adminApp;
-}
-
-async function verifySuperAdmin(request: NextRequest): Promise<{ uid: string } | null> {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
-  
-  const idToken = authHeader.substring(7);
-  const SUPERADMIN_UID = process.env.NEXT_PUBLIC_SUPERADMIN_UID;
-  
-  if (!SUPERADMIN_UID) {
-    console.error('SECURITY ERROR: SUPERADMIN_UID not configured');
-    return null;
-  }
-  
-  try {
-    const app = getAdminApp();
-    const auth = getAuth(app);
-    const decodedToken = await auth.verifyIdToken(idToken);
-    if (decodedToken.uid !== SUPERADMIN_UID) return null;
-    return { uid: decodedToken.uid };
-  } catch {
-    return null;
-  }
-}
+import { verifySuperAdmin, getAdminApp } from '@/lib/admin-auth';
+import { checkRateLimit, rateLimitResponse, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 
 function sanitizeText(text: string, maxLength: number = 200): string {
   return text.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;').slice(0, maxLength);
@@ -119,6 +81,14 @@ export async function POST(request: NextRequest) {
     const user = await verifySuperAdmin(request);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Rate limit magic link generation by UID
+    const rateLimitKey = user.uid;
+    const rateLimitResult = checkRateLimit(rateLimitKey, RATE_LIMIT_CONFIGS.magicLink);
+    
+    if (!rateLimitResult.allowed) {
+      return rateLimitResponse(rateLimitResult.retryAfter);
     }
 
     if (!restaurantId || !restaurantSlug) {

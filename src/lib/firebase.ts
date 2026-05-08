@@ -56,14 +56,24 @@ if (!SUPERADMIN_UID_ENV && typeof window !== 'undefined') {
 
 export const SUPERADMIN_UID = SUPERADMIN_UID_ENV || '';
 
-// Helper function to check if user is superadmin
-export const isSuperadmin = (uid: string | undefined | null): boolean => {
+// Helper function to check if user is superadmin by UID (fallback during migration)
+export const isSuperadminByUid = (uid: string | undefined | null): boolean => {
   if (!SUPERADMIN_UID) {
     console.error('SECURITY: SuperAdmin UID not configured - access denied by default');
     return false;
   }
   return uid === SUPERADMIN_UID;
 };
+
+// Helper to check if user has superadmin custom claim
+// This should be called with the ID token result
+export const isSuperadminFromClaims = (tokenResult: { claims: Record<string, unknown> } | null): boolean => {
+  if (!tokenResult) return false;
+  return tokenResult.claims?.role === 'superadmin';
+};
+
+// Legacy export - prefer isSuperadminFromClaims for new code
+export const isSuperadmin = isSuperadminByUid;
 
 // Validate config on module load (server-side only)
 if (typeof window === 'undefined') {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
+import { checkRateLimit, rateLimitResponse, getClientIp, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 
 // Initialize Firebase Admin
 function getAdminApp() {
@@ -39,6 +40,15 @@ export async function POST(request: NextRequest) {
     
     if (!restaurantSlug || !pin) {
       return NextResponse.json({ error: 'restaurantSlug and pin are required' }, { status: 400 });
+    }
+    
+    // Rate limit by restaurant slug + IP (brute-force protection)
+    const clientIp = getClientIp(request);
+    const rateLimitKey = `${restaurantSlug.toLowerCase()}:${clientIp}`;
+    const rateLimitResult = checkRateLimit(rateLimitKey, RATE_LIMIT_CONFIGS.staffPin);
+    
+    if (!rateLimitResult.allowed) {
+      return rateLimitResponse(rateLimitResult.retryAfter);
     }
     
     // Validate PIN format (4-6 digits)

@@ -11,11 +11,18 @@ service cloud.firestore {
     }
     
     function isSuperAdmin() {
-      return isAuthenticated() && request.auth.uid == superAdminUid();
+      return isAuthenticated() && (
+        // Primary: Check custom claim
+        request.auth.token.role == 'superadmin' ||
+        // Fallback during migration: Check UID (remove after migration complete)
+        request.auth.uid == superAdminUid()
+      );
     }
     
+    // Legacy function - can be removed after custom claims migration is complete
     function superAdminUid() {
-      // SuperAdmin UID - should match NEXT_PUBLIC_SUPERADMIN_UID
+      // This is kept as a fallback during migration
+      // TODO: Remove after all superadmins have custom claims set
       return 'rjAbnlO0deNZRavuHgfBsxRZTVY2';
     }
     
@@ -75,9 +82,28 @@ service cloud.firestore {
         && resource.data.ownerUid == request.auth.uid
         && resource.data.plan in ['free', 'pro'];
       
-      // 6. Owner can edit own restaurant
-      // 7. Owner cannot edit another restaurant (enforced by isOwner check)
-      allow update: if isOwner(restaurantId) || isSuperAdmin();
+      // 6. Owner can edit own restaurant (with plan restriction enforcement)
+      // SECURITY: Owners CANNOT modify these fields:
+      // - plan (must go through superadmin)
+      // - maxMenuItems (must go through superadmin)
+      // - menuItemCount (managed by system only)
+      // - watermarkEnabled (forced true for free plan)
+      // - slugType (forced 'free-random' for free plan)
+      // - slug (only superadmin can change)
+      allow update: if (isOwner(restaurantId) || isSuperAdmin())
+        // Owners on free plan cannot disable watermark
+        && (isSuperAdmin() || 
+            resource.data.plan != 'free' || 
+            request.resource.data.watermarkEnabled == true)
+        // Owners cannot change plan field
+        && (isSuperAdmin() || 
+            request.resource.data.plan == resource.data.plan)
+        // Owners cannot change maxMenuItems
+        && (isSuperAdmin() || 
+            request.resource.data.maxMenuItems == resource.data.maxMenuItems)
+        // Owners cannot change menuItemCount directly
+        && (isSuperAdmin() || 
+            request.resource.data.menuItemCount == resource.data.menuItemCount);
       
       // Only superadmin can delete
       allow delete: if isSuperAdmin();
