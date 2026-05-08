@@ -20,7 +20,8 @@ import {
   Gift,
   Grid3X3,
   Sparkles,
-  Clock
+  Clock,
+  Shield
 } from 'lucide-react';
 
 interface NavItem {
@@ -41,6 +42,7 @@ const navItems: NavItem[] = [
   { href: '/dashboard/promotions', label: 'Promotions', icon: <Gift className="w-5 h-5" /> },
   { href: '/dashboard/staff', label: 'Staff', icon: <Users className="w-5 h-5" /> },
   { href: '/dashboard/feedback', label: 'Feedback', icon: <Star className="w-5 h-5" /> },
+  { href: '/dashboard/security', label: 'Security', icon: <Shield className="w-5 h-5" /> },
   { href: '/dashboard/logs', label: 'Activity', icon: <Receipt className="w-5 h-5" /> },
   { href: '/dashboard/settings', label: 'Settings', icon: <Settings className="w-5 h-5" /> },
 ];
