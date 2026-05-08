@@ -1,0 +1,213 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isSuperAdmin() {
+      return isAuthenticated() && request.auth.uid == superAdminUid();
+    }
+    
+    function superAdminUid() {
+      // This should match your NEXT_PUBLIC_SUPERADMIN_UID
+      // In production, consider using Firebase Custom Claims instead
+      return 'rjAbnlO0deNZRavuHgfBsxRZTVY2';
+    }
+    
+    function isOwner(restaurantId) {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.ownerUid == request.auth.uid;
+    }
+    
+    function isStaff(restaurantId) {
+      let restaurant = get(/databases/$(database)/documents/restaurants/$(restaurantId)).data;
+      return isAuthenticated() && 
+        (restaurant.ownerUid == request.auth.uid || 
+         restaurant.staffUids[request.auth.uid] != null);
+    }
+    
+    function isValidString(value, maxLength) {
+      return value is string && value.size() > 0 && value.size() <= maxLength;
+    }
+    
+    function isValidPrice(price) {
+      return price is number && price >= 0 && price <= 100000;
+    }
+    
+    // ============================================
+    // RESTAURANTS
+    // ============================================
+    match /restaurants/{restaurantId} {
+      // Public read for active restaurants (for menu display)
+      allow read: if resource.data.status == 'active' || isStaff(restaurantId) || isSuperAdmin();
+      
+      // Only superadmin can create restaurants
+      allow create: if isSuperAdmin();
+      
+      // Owner or superadmin can update
+      allow update: if isOwner(restaurantId) || isSuperAdmin();
+      
+      // Only superadmin can delete
+      allow delete: if isSuperAdmin();
+      
+      // ============================================
+      // MENU ITEMS (subcollection)
+      // ============================================
+      match /items/{itemId} {
+        allow read: if resource == null || 
+          get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.status == 'active' ||
+          isStaff(restaurantId) || 
+          isSuperAdmin();
+        
+        allow create, update: if isStaff(restaurantId) || isSuperAdmin()
+          && isValidString(resource.data.name, 100)
+          && isValidPrice(resource.data.price);
+        
+        allow delete: if isStaff(restaurantId) || isSuperAdmin();
+      }
+      
+      // ============================================
+      // TABLES (subcollection)
+      // ============================================
+      match /tables/{tableId} {
+        allow read: if resource == null || 
+          get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.status == 'active' ||
+          isStaff(restaurantId) || 
+          isSuperAdmin();
+        
+        allow create, update, delete: if isStaff(restaurantId) || isSuperAdmin();
+      }
+      
+      // ============================================
+      // CATEGORIES (subcollection)
+      // ============================================
+      match /categories/{categoryId} {
+        allow read: if resource == null || 
+          get(/databases/$(database)/documents/restaurants/$(restaurantId)).data.status == 'active' ||
+          isStaff(restaurantId) || 
+          isSuperAdmin();
+        
+        allow create, update, delete: if isStaff(restaurantId) || isSuperAdmin();
+      }
+      
+      // ============================================
+      // STAFF (subcollection)
+      // ============================================
+      match /staff/{staffId} {
+        allow read: if isStaff(restaurantId) || isSuperAdmin();
+        allow create, update, delete: if isOwner(restaurantId) || isSuperAdmin();
+      }
+    }
+    
+    // ============================================
+    // ORDERS
+    // ============================================
+    match /orders/{orderId} {
+      // Customers can read their own orders (via deviceId)
+      // Staff can read orders for their restaurant
+      allow read: if isAuthenticated() && (
+        resource.data.deviceId == request.auth.token.deviceId ||
+        isStaff(resource.data.restaurantId) ||
+        isSuperAdmin()
+      );
+      
+      // Orders are created via Cloud Functions (with validation)
+      // Direct creation allowed for device-authenticated users
+      allow create: if isAuthenticated()
+        && isValidString(resource.data.restaurantId, 128)
+        && resource.data.status == 'CREATED'
+        && resource.data.createdAt == request.time.toMillis();
+      
+      // Status updates via Cloud Functions preferred
+      // Staff can update order status
+      allow update: if isStaff(resource.data.restaurantId) || isSuperAdmin()
+        // Only allow status field to change (prevent price manipulation)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt', 'updatedBy', 'acceptedAt', 'completedAt', 'cancelledAt', 'paidAt']);
+      
+      // Only superadmin can delete orders (for cleanup)
+      allow delete: if isSuperAdmin();
+    }
+    
+    // ============================================
+    // USERS
+    // ============================================
+    match /users/{userId} {
+      // Users can read and update their own profile
+      allow read, update: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Users can create their own profile
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Only superadmin can delete users
+      allow delete: if isSuperAdmin();
+    }
+    
+    // ============================================
+    // BANNED USERS (Security)
+    // ============================================
+    match /banned_users/{userId} {
+      // Only superadmin can manage banned users
+      allow read: if isSuperAdmin();
+      allow write: if isSuperAdmin();
+    }
+    
+    // ============================================
+    // MAGIC LINKS
+    // ============================================
+    match /magic_links/{tokenId} {
+      // Magic links are one-time use, self-destruct after use
+      allow read: if isAuthenticated() && (
+        resource.data.createdBy == request.auth.uid ||
+        isSuperAdmin()
+      );
+      
+      allow create: if isSuperAdmin();
+      allow update: if isAuthenticated() && resource.data.isUsed == false;
+      allow delete: if isSuperAdmin();
+    }
+    
+    // ============================================
+    // SYSTEM LOGS (Audit Trail)
+    // ============================================
+    match /system_logs/{logId} {
+      // Only superadmin can read logs
+      allow read: if isSuperAdmin();
+      
+      // Anyone authenticated can create logs (for audit trail)
+      allow create: if isAuthenticated();
+      
+      // Logs are immutable
+      allow update, delete: if false;
+    }
+    
+    // ============================================
+    // RATE LIMITING (Security)
+    // ============================================
+    match /rate_limits/{rateLimitId} {
+      allow read, write: if false; // Managed by Cloud Functions only
+    }
+    
+    // ============================================
+    // DEVICE SECURITY
+    // ============================================
+    match /kicked_devices/{deviceId} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin();
+    }
+    
+    match /banned_devices/{deviceId} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin();
+    }
+    
+    // ============================================
+    // DENY ALL OTHER (Default Deny)
+    // ============================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

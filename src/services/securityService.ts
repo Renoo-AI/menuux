@@ -86,8 +86,13 @@ class SecurityService {
       return result.data as SecurityStatus;
     } catch (error) {
       console.error('Error checking security status:', error);
-      // On error, allow access (fail open for availability)
-      return { allowed: true };
+      // SECURITY: Fail closed by default
+      // If we can't verify security status, deny access to be safe
+      // This prevents bypassing security through error injection
+      return { 
+        allowed: false, 
+        reason: 'Security verification unavailable. Please try again later.' 
+      };
     }
   }
 

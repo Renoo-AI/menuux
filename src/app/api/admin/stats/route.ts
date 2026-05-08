@@ -33,7 +33,11 @@ async function verifySuperAdmin(request: NextRequest): Promise<{ uid: string } |
   }
   
   const idToken = authHeader.substring(7);
-  const SUPERADMIN_UID = process.env.NEXT_PUBLIC_SUPERADMIN_UID || 'rjAbnlO0deNZRavuHgfBsxRZTVY2';
+  const SUPERADMIN_UID = process.env.NEXT_PUBLIC_SUPERADMIN_UID;
+  if (!SUPERADMIN_UID) {
+    console.error('SECURITY ERROR: SUPERADMIN_UID not configured');
+    return null;
+  }
   
   try {
     const app = getAdminApp();

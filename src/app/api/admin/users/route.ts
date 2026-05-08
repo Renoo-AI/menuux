@@ -23,7 +23,11 @@ async function verifySuperAdmin(request: NextRequest): Promise<{ uid: string } |
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
   
   const idToken = authHeader.substring(7);
-  const SUPERADMIN_UID = process.env.NEXT_PUBLIC_SUPERADMIN_UID || 'rjAbnlO0deNZRavuHgfBsxRZTVY2';
+  const SUPERADMIN_UID = process.env.NEXT_PUBLIC_SUPERADMIN_UID;
+  if (!SUPERADMIN_UID) {
+    console.error('SECURITY ERROR: SUPERADMIN_UID not configured');
+    return null;
+  }
   
   try {
     const app = getAdminApp();
@@ -84,7 +88,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid action. Use "ban" or "unban"' }, { status: 400 });
     }
 
-    const SUPERADMIN_UID = process.env.NEXT_PUBLIC_SUPERADMIN_UID || 'rjAbnlO0deNZRavuHgfBsxRZTVY2';
+    const SUPERADMIN_UID = process.env.NEXT_PUBLIC_SUPERADMIN_UID;
+  if (!SUPERADMIN_UID) {
+    console.error('SECURITY ERROR: SUPERADMIN_UID not configured');
+    return null;
+  }
     
     // Prevent banning superadmin
     if (userId === SUPERADMIN_UID) {
