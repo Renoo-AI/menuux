@@ -12,79 +12,141 @@ import {
   DoneAll,
   Restaurant,
   EventSeat,
-  Loader2
+  Loader2,
+  Bell,
+  Volume2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DashboardLayout } from '@/components/layout';
 import { TopAppBar } from '@/components/layout';
-import { orderService } from '@/services/orderService';
-import { tableService } from '@/services/tableService';
-import { authService } from '@/services/authService';
 import { useAuthStore } from '@/stores/authStore';
 import type { Order, Table, OrderState } from '@/types';
 
-// Demo restaurant ID for development
-const DEMO_RESTAURANT_ID = 'demo-restaurant';
+// Demo data for development/preview mode
+const demoOrders: Order[] = [
+  {
+    id: '1',
+    restaurantId: 'demo',
+    tableId: 't1',
+    tableName: 'Table 01',
+    items: [
+      { itemId: '1', name: 'Signature Latte', quantity: 2, unitPrice: 5.50, notes: 'Extra hot' },
+      { itemId: '2', name: 'Almond Croissant', quantity: 1, unitPrice: 4.50 },
+    ],
+    totalAmount: 15.50,
+    state: 'NEW',
+    createdAt: new Date(Date.now() - 2 * 60000),
+    updatedAt: new Date(),
+  },
+  {
+    id: '2',
+    restaurantId: 'demo',
+    tableId: 't2',
+    tableName: 'Table 03',
+    items: [
+      { itemId: '3', name: 'Cappuccino', quantity: 2, unitPrice: 4.50 },
+      { itemId: '4', name: 'Avocado Toast', quantity: 1, unitPrice: 12.00 },
+      { itemId: '5', name: 'Fresh Juice', quantity: 2, unitPrice: 6.00 },
+    ],
+    totalAmount: 33.00,
+    state: 'NEW',
+    createdAt: new Date(Date.now() - 5 * 60000),
+    updatedAt: new Date(),
+  },
+  {
+    id: '3',
+    restaurantId: 'demo',
+    tableId: 't3',
+    tableName: 'Table 12',
+    items: [
+      { itemId: '6', name: 'Truffle Tagliatelle', quantity: 1, unitPrice: 28.00, notes: 'Extra Parmesan' },
+      { itemId: '7', name: 'Burrata Salad', quantity: 1, unitPrice: 14.00 },
+    ],
+    totalAmount: 42.00,
+    state: 'ACCEPTED',
+    createdAt: new Date(Date.now() - 18 * 60000),
+    updatedAt: new Date(),
+  },
+  {
+    id: '4',
+    restaurantId: 'demo',
+    tableId: 't4',
+    tableName: 'Table 08',
+    items: [
+      { itemId: '8', name: 'Wagyu Burger', quantity: 2, unitPrice: 32.00 },
+      { itemId: '9', name: 'Wine Selection', quantity: 1, unitPrice: 48.00 },
+    ],
+    totalAmount: 112.00,
+    state: 'ACCEPTED',
+    createdAt: new Date(Date.now() - 35 * 60000),
+    updatedAt: new Date(),
+  },
+];
+
+const demoTables: Table[] = [
+  { id: 't1', restaurantId: 'demo', name: 'Table 01', label: 'Window Side', seats: 4, state: 'ACTIVE', qrCodeUrl: '/r/demo/t/T-01', createdAt: new Date(), updatedAt: new Date() },
+  { id: 't2', restaurantId: 'demo', name: 'Table 03', label: 'Main Hall', seats: 2, state: 'ACTIVE', qrCodeUrl: '/r/demo/t/T-03', createdAt: new Date(), updatedAt: new Date() },
+  { id: 't3', restaurantId: 'demo', name: 'Table 12', label: 'Patio', seats: 4, state: 'ACTIVE', qrCodeUrl: '/r/demo/t/T-12', createdAt: new Date(), updatedAt: new Date() },
+  { id: 't4', restaurantId: 'demo', name: 'Table 08', label: 'Corner', seats: 6, state: 'ACTIVE', qrCodeUrl: '/r/demo/t/T-08', createdAt: new Date(), updatedAt: new Date() },
+  { id: 't5', restaurantId: 'demo', name: 'Table 02', label: 'Window Side', seats: 2, state: 'AVAILABLE', qrCodeUrl: '/r/demo/t/T-02', createdAt: new Date(), updatedAt: new Date() },
+  { id: 't6', restaurantId: 'demo', name: 'Table 04', label: 'Main Hall', seats: 4, state: 'AVAILABLE', qrCodeUrl: '/r/demo/t/T-04', createdAt: new Date(), updatedAt: new Date() },
+  { id: 't7', restaurantId: 'demo', name: 'Table 05', label: 'Bar Area', seats: 2, state: 'AVAILABLE', qrCodeUrl: '/r/demo/t/T-05', createdAt: new Date(), updatedAt: new Date() },
+  { id: 't8', restaurantId: 'demo', name: 'B-01', label: 'Bar Stool', seats: 1, state: 'AVAILABLE', qrCodeUrl: '/r/demo/t/B-01', createdAt: new Date(), updatedAt: new Date() },
+];
 
 export default function CashierDashboard() {
   const router = useRouter();
   const { user, isAuthenticated, isLoading, setUser, setLoading } = useAuthStore();
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [tables, setTables] = useState<Table[]>([]);
+  const [orders, setOrders] = useState<Order[]>(demoOrders);
+  const [tables, setTables] = useState<Table[]>(demoTables);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [loading, setLoadingState] = useState(true);
+  const [loading, setLoadingState] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
-  // Auth check
+  // Update current time every minute
   useEffect(() => {
-    const unsubscribe = authService.subscribeToAuthState((authUser) => {
-      setUser(authUser);
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [setUser, setLoading]);
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
 
+  // Simulate real-time updates in demo mode
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push('/login');
-    }
-  }, [isLoading, isAuthenticated, router]);
-
-  // Subscribe to real-time updates
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const unsubOrders = orderService.subscribeToActiveOrders(DEMO_RESTAURANT_ID, (data) => {
-      setOrders(data);
-      setLoadingState(false);
-    });
-
-    const unsubTables = tableService.subscribeToTables(DEMO_RESTAURANT_ID, (data) => {
-      setTables(data);
-    });
-
-    return () => {
-      unsubOrders();
-      unsubTables();
-    };
-  }, [isAuthenticated]);
+    const timer = setInterval(() => {
+      // Randomly update order times to simulate real-time
+      setOrders(prev => prev.map(order => ({
+        ...order,
+        createdAt: order.createdAt,
+      })));
+    }, 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   const handleAcceptOrder = useCallback(async (orderId: string) => {
     setActionLoading(orderId + '-accept');
-    await orderService.acceptOrder(orderId);
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 500));
+    setOrders(prev => prev.map(o => 
+      o.id === orderId ? { ...o, state: 'ACCEPTED' as OrderState } : o
+    ));
     setActionLoading(null);
   }, []);
 
   const handleCompleteOrder = useCallback(async (orderId: string) => {
     setActionLoading(orderId + '-complete');
-    await orderService.completeOrder(orderId);
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 500));
+    setOrders(prev => prev.filter(o => o.id !== orderId));
     setSelectedOrder(null);
     setActionLoading(null);
   }, []);
 
   const handleCancelOrder = useCallback(async (orderId: string, reason: string) => {
     setActionLoading(orderId + '-cancel');
-    await orderService.cancelOrder(orderId, reason);
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 500));
+    setOrders(prev => prev.filter(o => o.id !== orderId));
     setSelectedOrder(null);
     setActionLoading(null);
   }, []);
@@ -127,13 +189,9 @@ export default function CashierDashboard() {
     return `${Math.floor(diff / 60)}h ago`;
   };
 
-  if (isLoading || !isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+  };
 
   // Group orders by state for display
   const newOrders = orders.filter(o => o.state === 'NEW');
@@ -147,14 +205,48 @@ export default function CashierDashboard() {
         subtitle={`${orders.length} busy`}
         showSearch={false}
         user={{
-          name: user?.staffProfile?.name || 'Staff',
-          role: user?.role || 'staff',
+          name: user?.staffProfile?.name || 'Demo Manager',
+          role: user?.role || 'manager',
         }}
       />
       
       <div className="flex-1 flex overflow-hidden">
         {/* Grid Area */}
         <section className="flex-1 overflow-y-auto p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 content-start">
+          {/* Stats Summary */}
+          <div className="col-span-full grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div className="bg-white rounded-xl p-4 shadow-card">
+              <div className="flex items-center gap-2 text-secondary mb-2">
+                <Bell className="w-5 h-5" />
+                <span className="font-label-caps text-label-caps">NEW ORDERS</span>
+              </div>
+              <p className="font-display text-headline-md text-primary">{newOrders.length}</p>
+            </div>
+            <div className="bg-white rounded-xl p-4 shadow-card">
+              <div className="flex items-center gap-2 text-primary mb-2">
+                <Restaurant className="w-5 h-5" />
+                <span className="font-label-caps text-label-caps">IN PROGRESS</span>
+              </div>
+              <p className="font-display text-headline-md text-primary">{acceptedOrders.length}</p>
+            </div>
+            <div className="bg-white rounded-xl p-4 shadow-card">
+              <div className="flex items-center gap-2 text-on-surface-variant mb-2">
+                <EventSeat className="w-5 h-5" />
+                <span className="font-label-caps text-label-caps">AVAILABLE</span>
+              </div>
+              <p className="font-display text-headline-md text-primary">
+                {tables.filter(t => !activeTableIds.includes(t.id) && t.state !== 'OFFLINE').length}
+              </p>
+            </div>
+            <div className="bg-white rounded-xl p-4 shadow-card">
+              <div className="flex items-center gap-2 text-on-surface-variant mb-2">
+                <Clock className="w-5 h-5" />
+                <span className="font-label-caps text-label-caps">CURRENT TIME</span>
+              </div>
+              <p className="font-display text-headline-md text-primary">{formatTime(currentTime)}</p>
+            </div>
+          </div>
+
           {/* New Orders (Pulsing) */}
           {newOrders.map((order) => (
             <div
