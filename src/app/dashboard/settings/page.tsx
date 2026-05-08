@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Plus, Camera, Edit, QrCode, MoreVertical, AlertCircle, Check, Loader2 } from 'lucide-react';
+import { Plus, Camera, Edit, QrCode, MoreVertical, AlertCircle, Check, Loader2, Sun, Moon, Monitor, Palette } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DashboardLayout } from '@/components/layout';
 import { TopAppBar } from '@/components/layout';
 import { useFormValidation, validationPatterns } from '@/hooks/use-form-validation';
 import { useToast } from '@/hooks/use-toast';
+import { useTheme } from 'next-themes';
 
 // Demo staff data
 const demoStaff = [
@@ -58,6 +59,10 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const { toast } = useToast();
+  const { theme, setTheme, resolvedTheme } = useTheme();
+  
+  // Use resolvedTheme which handles hydration automatically
+  const currentTheme = resolvedTheme || 'light';
   
   const {
     values,
@@ -253,6 +258,91 @@ export default function SettingsPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Appearance Settings */}
+        <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-slide-in-up" style={{ animationDelay: '150ms' }}>
+          <div className="lg:col-span-1">
+            <h3 className="font-display text-title-sm text-primary">Appearance</h3>
+            <p className="text-on-surface-variant mt-2">Customize the look and feel of your dashboard.</p>
+          </div>
+          
+          <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-card hover:shadow-lg transition-shadow duration-300">
+            <div className="space-y-6">
+              {/* Theme Selection */}
+              <div>
+                <label className="font-label-caps text-label-caps text-on-surface-variant block mb-4">
+                  THEME PREFERENCE
+                </label>
+                <div className="grid grid-cols-3 gap-4">
+                  <button
+                    onClick={() => setTheme('light')}
+                    className={`flex flex-col items-center gap-3 p-6 rounded-2xl border-2 transition-all duration-300 ${
+                      currentTheme === 'light'
+                        ? 'border-secondary bg-secondary-fixed/20 shadow-md'
+                        : 'border-outline-variant hover:border-secondary/50 hover:bg-surface-container-low'
+                    }`}
+                  >
+                    <Sun className={`w-8 h-8 ${currentTheme === 'light' ? 'text-secondary' : 'text-on-surface-variant'}`} />
+                    <span className="font-display text-title-sm">Light</span>
+                  </button>
+                  <button
+                    onClick={() => setTheme('dark')}
+                    className={`flex flex-col items-center gap-3 p-6 rounded-2xl border-2 transition-all duration-300 ${
+                      currentTheme === 'dark'
+                        ? 'border-secondary bg-secondary-fixed/20 shadow-md'
+                        : 'border-outline-variant hover:border-secondary/50 hover:bg-surface-container-low'
+                    }`}
+                  >
+                    <Moon className={`w-8 h-8 ${currentTheme === 'dark' ? 'text-secondary' : 'text-on-surface-variant'}`} />
+                    <span className="font-display text-title-sm">Dark</span>
+                  </button>
+                  <button
+                    onClick={() => setTheme('system')}
+                    className={`flex flex-col items-center gap-3 p-6 rounded-2xl border-2 transition-all duration-300 ${
+                      theme === 'system'
+                        ? 'border-secondary bg-secondary-fixed/20 shadow-md'
+                        : 'border-outline-variant hover:border-secondary/50 hover:bg-surface-container-low'
+                    }`}
+                  >
+                    <Monitor className={`w-8 h-8 ${theme === 'system' ? 'text-secondary' : 'text-on-surface-variant'}`} />
+                    <span className="font-display text-title-sm">System</span>
+                  </button>
+                </div>
+              </div>
+              
+              {/* Color Accent */}
+              <div>
+                <label className="font-label-caps text-label-caps text-on-surface-variant block mb-4">
+                  ACCENT COLOR
+                </label>
+                <div className="flex gap-3">
+                  {[
+                    { color: '#C9A07E', name: 'Café' },
+                    { color: '#6B8E4E', name: 'Garden' },
+                    { color: '#7B68A6', name: 'Violet' },
+                    { color: '#C46B6B', name: 'Rose' },
+                    { color: '#5B8BA0', name: 'Ocean' },
+                  ].map((accent) => (
+                    <button
+                      key={accent.color}
+                      className="group relative"
+                      title={accent.name}
+                    >
+                      <div 
+                        className="w-10 h-10 rounded-full transition-transform duration-200 group-hover:scale-110 ring-2 ring-transparent group-hover:ring-outline-variant"
+                        style={{ backgroundColor: accent.color }}
+                      />
+                      <span className="sr-only">{accent.name}</span>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-on-surface-variant text-sm mt-3">
+                  Premium feature: Customize your brand accent color
+                </p>
+              </div>
             </div>
           </div>
         </section>

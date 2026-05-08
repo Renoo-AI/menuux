@@ -138,6 +138,87 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Dark Mode */
+.dark {
+  --color-background: #1a1714;
+  --color-foreground: #f5f0ee;
+  --color-espresso: #3A322D;
+  --color-accent: #C9A07E;
+  --color-soft-beige: #EFE4D8;
+  
+  /* Primary Colors */
+  --color-primary: #eee0d8;
+  --color-primary-foreground: #241d19;
+  --color-primary-container: #3a322d;
+  --color-primary-fixed: #eee0d8;
+  --color-primary-fixed-dim: #d1c4bd;
+  
+  /* Secondary Colors */
+  --color-secondary: #ffdcc1;
+  --color-secondary-foreground: #241d19;
+  --color-secondary-container: #5e4025;
+  --color-secondary-fixed: #ffdcc1;
+  --color-secondary-fixed-dim: #eabe9a;
+  
+  /* Tertiary Colors */
+  --color-tertiary: #cfc5b9;
+  --color-tertiary-container: #39332b;
+  --color-tertiary-fixed: #ece1d5;
+  --color-tertiary-fixed-dim: #cfc5b9;
+  
+  /* Surface Colors */
+  --color-surface: #1a1714;
+  --color-surface-dim: #1a1714;
+  --color-surface-bright: #3a322d;
+  --color-surface-variant: #3a322d;
+  --color-surface-container: #241d19;
+  --color-surface-container-low: #1f1b17;
+  --color-surface-container-lowest: #14110f;
+  --color-surface-container-high: #2a2420;
+  --color-surface-container-highest: #352f2a;
+  
+  /* Outline Colors */
+  --color-outline: #9a8f87;
+  --color-outline-variant: #4d4540;
+  
+  /* Error Colors */
+  --color-error: #ffb4ab;
+  --color-error-container: #93000a;
+  
+  /* Success Colors */
+  --color-success: #4ade80;
+  --color-success-container: #14532d;
+  
+  /* Text Colors */
+  --color-on-primary: #241d19;
+  --color-on-secondary: #241d19;
+  --color-on-tertiary: #241d19;
+  --color-on-surface: #f5f0ee;
+  --color-on-background: #f5f0ee;
+  --color-on-surface-variant: #d1c4bd;
+  --color-on-error: #241d19;
+  --color-on-primary-container: #d1c4bd;
+  --color-on-secondary-container: #ffdcc1;
+  --color-on-tertiary-container: #cfc5b9;
+  --color-on-error-container: #ffb4ab;
+  --color-on-primary-fixed: #eee0d8;
+  --color-on-secondary-fixed: #2d1601;
+  --color-on-tertiary-fixed: #201b14;
+  --color-on-primary-fixed-variant: #d1c4bd;
+  --color-on-secondary-fixed-variant: #eabe9a;
+  --color-on-tertiary-fixed-variant: #cfc5b9;
+  
+  /* Inverse Colors */
+  --color-inverse-surface: #f5f0ee;
+  --color-inverse-primary: #79573a;
+  --color-inverse-on-surface: #1a1714;
+  
+  /* Box Shadows */
+  --shadow-luxury: 0 10px 40px -10px rgba(0, 0, 0, 0.5);
+  --shadow-card: 0px 10px 30px rgba(0, 0, 0, 0.2);
+  --shadow-card-hover: 0px 20px 40px rgba(0, 0, 0, 0.3);
+}
+
 /* Material Symbols Configuration */
 .material-symbols-outlined {
   font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;

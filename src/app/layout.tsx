@@ -3,6 +3,7 @@ import { Playfair_Display, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import { ThemeProvider } from "@/components/theme-provider";
 
 // Menux Brand Fonts
 const playfairDisplay = Playfair_Display({
@@ -57,10 +58,17 @@ export default function RootLayout({
       <body
         className={`${playfairDisplay.variable} ${plusJakartaSans.variable} antialiased bg-background text-foreground font-sans`}
       >
-        <ErrorBoundary>
-          {children}
-        </ErrorBoundary>
-        <Toaster />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );

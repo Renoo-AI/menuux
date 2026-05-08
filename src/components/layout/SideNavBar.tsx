@@ -11,7 +11,9 @@ import {
   Settings,
   HelpCircle,
   LogOut,
-  Plus
+  Plus,
+  History,
+  Receipt
 } from 'lucide-react';
 
 interface NavItem {
@@ -22,10 +24,10 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
-  { href: '/dashboard/orders', label: 'Orders', icon: <ClipboardList className="w-5 h-5" /> },
+  { href: '/dashboard/history', label: 'History', icon: <History className="w-5 h-5" /> },
   { href: '/dashboard/menu', label: 'Menu', icon: <BookOpen className="w-5 h-5" /> },
   { href: '/dashboard/tables', label: 'Tables', icon: <UtensilsCrossed className="w-5 h-5" /> },
-  { href: '/dashboard/logs', label: 'Activity', icon: <ClipboardList className="w-5 h-5" /> },
+  { href: '/dashboard/logs', label: 'Activity', icon: <Receipt className="w-5 h-5" /> },
   { href: '/dashboard/settings', label: 'Settings', icon: <Settings className="w-5 h-5" /> },
 ];
 

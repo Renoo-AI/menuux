@@ -10,7 +10,8 @@ import {
   User,
   Utensils,
   BookOpen,
-  Receipt
+  Receipt,
+  History
 } from 'lucide-react';
 
 interface NavItem {
@@ -28,7 +29,7 @@ const publicNavItems: NavItem[] = [
 
 const dashboardNavItems: NavItem[] = [
   { href: '/dashboard', label: 'Home', icon: <Home className="w-6 h-6" /> },
-  { href: '/dashboard/orders', label: 'Orders', icon: <Receipt className="w-6 h-6" /> },
+  { href: '/dashboard/history', label: 'History', icon: <History className="w-6 h-6" /> },
   { href: '/dashboard/menu', label: 'Menu', icon: <BookOpen className="w-6 h-6" /> },
   { href: '/dashboard/settings', label: 'Profile', icon: <User className="w-6 h-6" /> },
 ];
