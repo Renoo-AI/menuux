@@ -59,12 +59,14 @@ export default function MenuPage({ params }: { params: Promise<{ slug: string }>
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [loading, setLoading] = useState(true);
   const [lang, setLang] = useState<'fr' | 'ar'>('fr');
+  const [mounted, setMounted] = useState(false);
   
   const { addItem, removeItem, getTotalItems, getTotalPrice, getItemByItemId } = useCartStore();
   const count = getTotalItems();
   const total = getTotalPrice();
 
   useEffect(() => {
+    setMounted(true);
     (async () => {
       try {
         if (resolvedParams.slug === 'demo') {
@@ -87,9 +89,15 @@ export default function MenuPage({ params }: { params: Promise<{ slug: string }>
   if (loading) {
     return (
       <div className="bg-[#FFFEF9] min-h-screen flex items-center justify-center">
-        <div className="flex flex-col items-center gap-6">
-          <div className="w-12 h-12 border-2 border-[#1a1a1a] border-t-transparent rounded-full animate-spin" />
-          <div className="h-3 w-24 bg-[#1a1a1a]/10 rounded shimmer" />
+        <div className="flex flex-col items-center gap-8">
+          <div className="relative">
+            <div className="w-14 h-14 border-2 border-[#1a1a1a]/20 rounded-full" />
+            <div className="absolute inset-0 w-14 h-14 border-2 border-[#1a1a1a] border-t-transparent rounded-full animate-spin" />
+          </div>
+          <div className="space-y-2">
+            <div className="h-3 w-28 bg-[#1a1a1a]/5 rounded-full shimmer" />
+            <div className="h-2 w-20 bg-[#1a1a1a]/5 rounded-full shimmer mx-auto" style={{ animationDelay: '0.2s' }} />
+          </div>
         </div>
       </div>
     );
@@ -100,10 +108,10 @@ export default function MenuPage({ params }: { params: Promise<{ slug: string }>
       <div className="bg-[#FFFEF9] min-h-screen pb-24" dir={lang === 'ar' ? 'rtl' : 'ltr'} lang={lang}>
         
         {/* HEADER */}
-        <header className="sticky top-0 z-50 bg-[#FFFEF9]/95 backdrop-blur-sm">
+        <header className={`sticky top-0 z-50 bg-[#FFFEF9]/95 backdrop-blur-sm transition-all duration-700 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}`}>
           <div className="max-w-lg mx-auto px-6 py-6 flex flex-col items-center">
             {/* Logo Mark */}
-            <div className="w-11 h-11 border-[1.5px] border-[#1a1a1a] rounded-full flex items-center justify-center mb-3">
+            <div className="w-11 h-11 border-[1.5px] border-[#1a1a1a] rounded-full flex items-center justify-center mb-3 hover:scale-110 hover:rotate-12 transition-transform duration-300 cursor-pointer">
               <span className="font-serif text-lg font-semibold text-[#1a1a1a]">Z</span>
             </div>
             <h1 className="font-serif text-xl font-medium text-[#1a1a1a] tracking-wide">{restaurant?.name}</h1>
@@ -113,7 +121,7 @@ export default function MenuPage({ params }: { params: Promise<{ slug: string }>
           {/* Language Toggle */}
           <button
             onClick={() => setLang(lang === 'fr' ? 'ar' : 'fr')}
-            className="absolute top-6 right-5 text-[11px] font-medium text-[#1a1a1a]/50 hover:text-[#1a1a1a] transition-colors"
+            className="absolute top-6 right-5 text-[11px] font-medium text-[#1a1a1a]/50 hover:text-[#1a1a1a] transition-all duration-300 hover:scale-105 active:scale-95"
           >
             {UI[lang].toggle}
           </button>
@@ -127,7 +135,11 @@ export default function MenuPage({ params }: { params: Promise<{ slug: string }>
           {categories.map((cat, catIdx) => {
             const items = MENU.filter(i => (lang === 'fr' ? i.category : i.categoryAr) === cat);
             return (
-              <section key={cat} className="relative">
+              <section 
+                key={cat} 
+                className={`relative transition-all duration-700 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+                style={{ transitionDelay: `${(catIdx + 1) * 100}ms` }}
+              >
                 {/* Category Title */}
                 <div className="flex items-center gap-4 mb-5 px-1">
                   <span className="text-[10px] uppercase tracking-[0.2em] text-[#1a1a1a]/30 font-medium">{String(catIdx + 1).padStart(2, '0')}</span>
@@ -143,27 +155,28 @@ export default function MenuPage({ params }: { params: Promise<{ slug: string }>
                     return (
                       <div
                         key={item.id}
-                        className="group flex items-center justify-between py-4 px-1 hover:bg-[#1a1a1a]/[0.02] rounded-lg transition-colors duration-200"
+                        className={`group flex items-center justify-between py-4 px-1 rounded-lg transition-all duration-500 hover:bg-[#1a1a1a]/[0.02] ${mounted ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-4'}`}
+                        style={{ transitionDelay: `${(catIdx + 1) * 100 + (idx + 1) * 50}ms` }}
                       >
                         {/* Name */}
-                        <span className="text-[15px] text-[#1a1a1a]/80 font-medium flex-1 pr-4">{name}</span>
+                        <span className="text-[15px] text-[#1a1a1a]/80 font-medium flex-1 pr-4 group-hover:text-[#1a1a1a] transition-colors duration-300">{name}</span>
                         
                         {/* Right side: Price + Action */}
                         <div className="flex items-center gap-4">
                           <span className="text-[15px] text-[#1a1a1a] font-medium tabular-nums">{item.price} {currency}</span>
                           
                           {qty > 0 ? (
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 animate-scale-in">
                               <button 
                                 onClick={() => removeItem(item.id)} 
-                                className="w-8 h-8 rounded-full border border-[#1a1a1a]/20 text-[#1a1a1a]/60 flex items-center justify-center text-lg hover:border-[#1a1a1a]/40 hover:text-[#1a1a1a] transition-all active:scale-90"
+                                className="w-8 h-8 rounded-full border border-[#1a1a1a]/20 text-[#1a1a1a]/60 flex items-center justify-center text-lg hover:border-[#1a1a1a]/40 hover:text-[#1a1a1a] hover:scale-110 transition-all duration-200 active:scale-90"
                               >
                                 −
                               </button>
-                              <span className="w-5 text-center font-semibold text-sm text-[#1a1a1a]">{qty}</span>
+                              <span className="w-5 text-center font-semibold text-sm text-[#1a1a1a] tabular-nums">{qty}</span>
                               <button 
                                 onClick={() => addItem({ itemId: item.id, name, price: parseFloat(item.price), quantity: 1 })} 
-                                className="w-8 h-8 rounded-full bg-[#1a1a1a] text-white flex items-center justify-center text-lg font-light hover:bg-[#1a1a1a]/90 transition-all active:scale-90"
+                                className="w-8 h-8 rounded-full bg-[#1a1a1a] text-white flex items-center justify-center text-lg font-light hover:bg-[#1a1a1a]/90 hover:scale-110 transition-all duration-200 active:scale-90"
                               >
                                 +
                               </button>
@@ -171,7 +184,7 @@ export default function MenuPage({ params }: { params: Promise<{ slug: string }>
                           ) : (
                             <button 
                               onClick={() => addItem({ itemId: item.id, name, price: parseFloat(item.price), quantity: 1 })} 
-                              className="w-8 h-8 rounded-full border border-[#1a1a1a]/20 text-[#1a1a1a]/40 flex items-center justify-center hover:border-[#1a1a1a] hover:text-[#1a1a1a] hover:bg-[#1a1a1a]/[0.03] transition-all active:scale-90"
+                              className="w-8 h-8 rounded-full border border-[#1a1a1a]/20 text-[#1a1a1a]/40 flex items-center justify-center hover:border-[#1a1a1a] hover:text-[#1a1a1a] hover:bg-[#1a1a1a]/[0.03] hover:scale-110 transition-all duration-200 active:scale-90"
                             >
                               <Plus className="w-4 h-4" />
                             </button>
@@ -192,29 +205,27 @@ export default function MenuPage({ params }: { params: Promise<{ slug: string }>
         </main>
 
         {/* FOOTER */}
-        <footer className="text-center py-8 pb-12">
+        <footer className={`text-center py-8 pb-12 transition-all duration-700 delay-500 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
           <p className="font-serif text-sm text-[#1a1a1a]/30">{UI[lang].footer}</p>
           <p className="text-[9px] uppercase tracking-[0.3em] text-[#1a1a1a]/20 mt-2">Oued Ellil · Tunis</p>
         </footer>
 
         {/* CART BUTTON */}
-        {count > 0 && (
-          <Link 
-            href={`/r/${restaurant?.slug || 'demo'}/t/order`} 
-            className="fixed bottom-6 left-5 right-5 z-50 max-w-lg mx-auto"
-          >
-            <div className="bg-[#1a1a1a] text-white h-[52px] rounded-full shadow-lg shadow-[#1a1a1a]/20 flex items-center justify-between px-5 active:scale-[0.98] transition-transform">
-              <div className="flex items-center gap-3">
-                <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center font-semibold text-sm">{count}</span>
-                <span className="font-medium text-sm uppercase tracking-wider">{UI[lang].order}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-semibold">{total.toFixed(2)} {currency}</span>
-                <ChevronRight className="w-4 h-4 opacity-60" />
-              </div>
+        <Link 
+          href={`/r/${restaurant?.slug || 'demo'}/t/order`} 
+          className={`fixed bottom-6 left-5 right-5 z-50 max-w-lg mx-auto transition-all duration-500 ${count > 0 ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-8 scale-95 pointer-events-none'}`}
+        >
+          <div className="bg-[#1a1a1a] text-white h-[52px] rounded-full shadow-lg shadow-[#1a1a1a]/20 flex items-center justify-between px-5 hover:shadow-xl hover:shadow-[#1a1a1a]/25 transition-all duration-300 active:scale-[0.98]">
+            <div className="flex items-center gap-3">
+              <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center font-semibold text-sm animate-pulse-subtle">{count}</span>
+              <span className="font-medium text-sm uppercase tracking-wider">{UI[lang].order}</span>
             </div>
-          </Link>
-        )}
+            <div className="flex items-center gap-2">
+              <span className="font-semibold tabular-nums">{total.toFixed(2)} {currency}</span>
+              <ChevronRight className="w-4 h-4 opacity-60 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </div>
+        </Link>
 
         {/* Styles */}
         <style jsx global>{`
@@ -240,9 +251,27 @@ export default function MenuPage({ params }: { params: Promise<{ slug: string }>
           }
           
           .shimmer {
-            background: linear-gradient(90deg, #1a1a1a/10 25%, #1a1a1a/5 50%, #1a1a1a/10 75%);
+            background: linear-gradient(90deg, #1a1a1a/5 25%, #1a1a1a/10 50%, #1a1a1a/5 75%);
             background-size: 200% 100%;
-            animation: shimmer 1.5s infinite;
+            animation: shimmer 1.5s infinite linear;
+          }
+          
+          @keyframes scale-in {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+          }
+          
+          .animate-scale-in {
+            animation: scale-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+          }
+          
+          @keyframes pulse-subtle {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+          }
+          
+          .animate-pulse-subtle {
+            animation: pulse-subtle 2s ease-in-out infinite;
           }
         `}</style>
       </div>
