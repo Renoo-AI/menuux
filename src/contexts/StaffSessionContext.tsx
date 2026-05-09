@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import type { StaffSession, StaffRole } from '@/types';
-import { SUPERADMIN_UID, auth, isSuperadminFromClaims } from '@/lib/firebase';
+import { auth, isSuperadminFromClaims } from '@/lib/firebase';
 import { onAuthStateChanged, User, getIdTokenResult } from 'firebase/auth';
 import { isOfflineError } from '@/hooks/useNetworkStatus';
 
@@ -68,10 +68,8 @@ export function StaffSessionProvider({ children }: { children: React.ReactNode }
             // Check for superadmin status via custom claim (primary)
             const hasSuperadminClaim = isSuperadminFromClaims(tokenResult);
             
-            // Fallback: Check UID during migration period
-            const isFallbackSuperadmin = user.uid === SUPERADMIN_UID;
-            
-            const isActuallySuperadmin = hasSuperadminClaim || isFallbackSuperadmin;
+            // Note: UID fallback has been removed - use custom claims only
+            const isActuallySuperadmin = hasSuperadminClaim;
             
             setIsSuperadminState(isActuallySuperadmin);
             setIsOffline(false);
@@ -219,13 +217,11 @@ export function StaffSessionProvider({ children }: { children: React.ReactNode }
       const user = userCredential.user;
       
       // SECURITY: Check if this is the superadmin
-      // Primary: Custom claim 'role: superadmin'
-      // Fallback: UID comparison during migration
+      // Uses custom claim 'role: superadmin'
       const tokenResult = await getIdTokenResult(user);
       const hasSuperadminClaim = isSuperadminFromClaims(tokenResult);
-      const isFallbackSuperadmin = user.uid === SUPERADMIN_UID;
       
-      if (hasSuperadminClaim || isFallbackSuperadmin) {
+      if (hasSuperadminClaim) {
         // Session will be created by onAuthStateChanged listener
         return { success: true };
       }

@@ -9,7 +9,7 @@ import {
   signOut,
   onAuthStateChanged
 } from 'firebase/auth';
-import { auth, db, SUPERADMIN_UID } from '@/lib/firebase';
+import { auth, db, isSuperadminFromClaims } from '@/lib/firebase';
 import { collection, addDoc } from 'firebase/firestore';
 import { ShieldAlert, Mail, Lock, Loader2, AlertCircle, WifiOff } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -34,12 +34,18 @@ export default function AdminLoginPage() {
   useEffect(() => {
     if (authStateProcessed.current) return;
     
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (authStateProcessed.current) return;
       authStateProcessed.current = true;
       
-      if (user && user.uid === SUPERADMIN_UID) {
-        router.replace('/admin');
+      if (user) {
+        // Check custom claims for superadmin status
+        const tokenResult = await user.getIdTokenResult();
+        if (isSuperadminFromClaims(tokenResult)) {
+          router.replace('/admin');
+        } else {
+          setCheckingAuth(false);
+        }
       } else {
         setCheckingAuth(false);
       }
@@ -99,8 +105,9 @@ export default function AdminLoginPage() {
       
       const result = await signInWithPopup(auth, provider);
       
-      // Check if user is superadmin
-      if (result.user.uid !== SUPERADMIN_UID) {
+      // Check if user is superadmin via custom claims
+      const tokenResult = await result.user.getIdTokenResult();
+      if (!isSuperadminFromClaims(tokenResult)) {
         await logLoginAttempt('GOOGLE', result.user.uid, result.user.email || '', false);
         await signOut(auth);
         setError('Access denied. Only authorized administrators can access this panel.');
@@ -149,8 +156,9 @@ export default function AdminLoginPage() {
       
       const result = await signInWithEmailAndPassword(auth, email, password);
       
-      // Check if user is superadmin
-      if (result.user.uid !== SUPERADMIN_UID) {
+      // Check if user is superadmin via custom claims
+      const tokenResult = await result.user.getIdTokenResult();
+      if (!isSuperadminFromClaims(tokenResult)) {
         await logLoginAttempt('EMAIL', result.user.uid, result.user.email || '', false);
         await signOut(auth);
         setError('Access denied. Only authorized administrators can access this panel.');

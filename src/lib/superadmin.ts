@@ -66,5 +66,7 @@ export function isSuperadminClient(idTokenResult: { claims: Record<string, unkno
  * Fallback UID for migration period
  * This allows the old superadmin to access the system while claims are being set
  * Can be removed after migration is complete
+ * 
+ * SECURITY: Uses server-only environment variable (no NEXT_PUBLIC_ prefix)
  */
-export const FALLBACK_SUPERADMIN_UID = process.env.NEXT_PUBLIC_SUPERADMIN_UID || '';
+export const FALLBACK_SUPERADMIN_UID = process.env.SUPERADMIN_UID || '';

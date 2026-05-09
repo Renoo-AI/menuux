@@ -22,7 +22,8 @@ function getAdminApp() {
   });
 }
 
-const SUPERADMIN_UID = process.env.NEXT_PUBLIC_SUPERADMIN_UID || '';
+// SECURITY: Uses server-only environment variable (no NEXT_PUBLIC_ prefix)
+const SUPERADMIN_UID = process.env.SUPERADMIN_UID || '';
 
 // Simple hash function for PIN (use bcrypt in production)
 async function hashPin(pin: string): Promise<string> {

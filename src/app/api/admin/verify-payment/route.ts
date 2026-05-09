@@ -23,7 +23,8 @@ async function verifySuperAdmin(request: NextRequest): Promise<{ uid: string } |
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
   
   const idToken = authHeader.substring(7);
-  const SUPERADMIN_UID = process.env.NEXT_PUBLIC_SUPERADMIN_UID;
+  // SECURITY: Uses server-only environment variable (no NEXT_PUBLIC_ prefix)
+  const SUPERADMIN_UID = process.env.SUPERADMIN_UID;
   if (!SUPERADMIN_UID) {
     console.error('SECURITY ERROR: SUPERADMIN_UID not configured');
     return null;

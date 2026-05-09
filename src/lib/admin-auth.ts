@@ -10,7 +10,9 @@ import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 
 // Fallback UID during migration (remove after custom claims migration complete)
-const FALLBACK_SUPERADMIN_UID = process.env.NEXT_PUBLIC_SUPERADMIN_UID || '';
+// IMPORTANT: This uses the server-only environment variable (no NEXT_PUBLIC_ prefix)
+// This ensures the UID is never exposed to the client
+const FALLBACK_SUPERADMIN_UID = process.env.SUPERADMIN_UID || '';
 
 // Initialize Firebase Admin SDK
 let adminApp: ReturnType<typeof initializeApp> | null = null;

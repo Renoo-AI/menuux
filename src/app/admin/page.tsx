@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { auth, SUPERADMIN_UID } from '@/lib/firebase';
-import { onAuthStateChanged, User, signOut, getIdToken } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
+import { isSuperadminFromClaims } from '@/lib/firebase';
+import { onAuthStateChanged, User, signOut, getIdToken, getIdTokenResult } from 'firebase/auth';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -109,13 +110,23 @@ export default function SuperAdminDashboard() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
-      if (user && user.uid === SUPERADMIN_UID) {
-        setIsAuthorized(true);
+      if (user) {
         try {
-          const token = await getIdToken(user);
-          setAuthToken(token);
+          // Get the ID token result to check custom claims
+          const tokenResult = await getIdTokenResult(user);
+          
+          // Check if user has superadmin role via custom claims
+          // This is the ONLY secure way to verify superadmin status
+          if (isSuperadminFromClaims(tokenResult)) {
+            setIsAuthorized(true);
+            const token = await getIdToken(user);
+            setAuthToken(token);
+          } else {
+            setIsAuthorized(false);
+          }
         } catch (error) {
-          console.error('Failed to get auth token:', error);
+          console.error('Failed to verify superadmin claims:', error);
+          setIsAuthorized(false);
         }
       } else {
         setIsAuthorized(false);

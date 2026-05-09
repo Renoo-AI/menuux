@@ -7,12 +7,22 @@
  * 
  * This script must be run with Firebase Admin SDK credentials.
  * Set FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY environment variables.
+ * 
+ * SECURITY: This script grants superadmin privileges and should be used with caution.
  */
 
 import { initializeApp, cert, getApps, getApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 
 const SUPERADMIN_ROLE = 'superadmin';
+
+// SECURITY: Prevent running in production without explicit override
+if (process.env.NODE_ENV === 'production' && process.env.ALLOW_SUPERADMIN_SCRIPT !== 'true') {
+  console.error('❌ SECURITY ERROR: This script is blocked in production!');
+  console.error('   To allow running in production, set ALLOW_SUPERADMIN_SCRIPT=true');
+  console.error('   WARNING: This grants superadmin privileges to any user!');
+  process.exit(1);
+}
 
 async function setSuperadminClaim(uid: string) {
   // Initialize Firebase Admin

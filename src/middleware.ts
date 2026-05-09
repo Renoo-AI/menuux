@@ -19,6 +19,64 @@ const RATE_LIMITS = {
   staffVerify: { windowMs: 15 * 60 * 1000, max: 3 },
 };
 
+// Route protection configuration
+const PROTECTED_ROUTES = {
+  // Admin routes require superadmin authentication
+  admin: {
+    paths: ['/admin'],
+    loginPath: '/admin/login',
+    sessionCookie: 'firebase-auth-token',
+  },
+  // Staff routes require staff authentication
+  staff: {
+    paths: ['/staff'],
+    loginPath: '/staff/login',
+    sessionCookie: 'staff-session',
+    excludePaths: ['/staff/login', '/staff/verify'],
+  },
+  // Dashboard routes require staff authentication with proper role
+  dashboard: {
+    paths: ['/dashboard'],
+    loginPath: '/staff/login',
+    sessionCookie: 'staff-session',
+  },
+};
+
+/**
+ * Check if a path matches any protected route pattern
+ */
+function getProtectedRouteType(pathname: string): { type: keyof typeof PROTECTED_ROUTES; config: typeof PROTECTED_ROUTES.admin } | null {
+  for (const [type, config] of Object.entries(PROTECTED_ROUTES)) {
+    for (const path of config.paths) {
+      // Check if pathname starts with the protected path
+      if (pathname.startsWith(path)) {
+        // Check if this path should be excluded
+        if ('excludePaths' in config && config.excludePaths) {
+          const isExcluded = config.excludePaths.some(excluded => pathname.startsWith(excluded));
+          if (isExcluded) continue;
+        }
+        // Exact match for the protected path itself (e.g., /admin but not /admin/login)
+        if (pathname === path || pathname.startsWith(path + '/')) {
+          return { type: type as keyof typeof PROTECTED_ROUTES, config };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Check for authentication session
+ * Since Firebase tokens can't be verified in Edge runtime, we check for session cookie presence
+ * Actual token verification happens server-side in the page/API route
+ */
+function hasAuthSession(request: NextRequest, cookieName: string): boolean {
+  const sessionCookie = request.cookies.get(cookieName);
+  // Also check Authorization header for API requests
+  const authHeader = request.headers.get('Authorization');
+  return !!(sessionCookie?.value || (authHeader && authHeader.startsWith('Bearer ')));
+}
+
 function getRateLimitKey(request: NextRequest, type: keyof typeof RATE_LIMITS): string {
   const ip = getClientIp(request);
   return `${type}:${ip}`;
@@ -72,6 +130,48 @@ export async function middleware(request: NextRequest) {
   if (banCheck.isBanned) {
     console.warn(`Blocked banned IP: ${clientIp} - ${banCheck.reason}`);
     return bannedResponse(banCheck.reason || 'Access denied');
+  }
+  
+  // Check for protected routes (non-API routes only - API routes handle their own auth)
+  if (!pathname.startsWith('/api/')) {
+    const protectedRoute = getProtectedRouteType(pathname);
+    
+    if (protectedRoute) {
+      const { config, type } = protectedRoute;
+      
+      // Skip login pages themselves
+      if (pathname === config.loginPath) {
+        const response = NextResponse.next();
+        response.headers.set('X-Request-Id', crypto.randomUUID());
+        return addSecurityHeaders(response);
+      }
+      
+      // Check for authentication session
+      // Note: This is a preliminary check. Full token verification happens server-side.
+      // We check for the presence of auth cookies/headers to prevent obvious unauthorized access.
+      const hasSession = hasAuthSession(request, config.sessionCookie);
+      
+      if (!hasSession) {
+        // For admin routes, also check for Firebase ID token in localStorage (via cookie)
+        // Since Firebase stores tokens in memory/localStorage, we set a session cookie on login
+        const idTokenCookie = request.cookies.get('firebase-id-token');
+        const staffSessionCookie = request.cookies.get('staff-session-token');
+        
+        const hasAnyAuth = !!(idTokenCookie?.value || staffSessionCookie?.value);
+        
+        if (!hasAnyAuth) {
+          // No session found - redirect to login
+          console.log(`[Middleware] No auth session for ${type} route: ${pathname}`);
+          const loginUrl = new URL(config.loginPath, request.url);
+          // Add redirect URL for post-login redirect
+          loginUrl.searchParams.set('redirect', pathname);
+          return NextResponse.redirect(loginUrl);
+        }
+      }
+      
+      // Log access to protected routes for audit
+      console.log(`[Middleware] Authenticated access to ${type} route: ${pathname} from IP: ${clientIp}`);
+    }
   }
   
   // Apply rate limiting to API routes
@@ -132,12 +232,14 @@ export const config = {
   matcher: [
     // Apply to all API routes
     '/api/:path*',
-    // Apply to admin pages
+    // Apply to admin pages (superadmin panel)
     '/admin/:path*',
     // Apply to auth routes
     '/auth/:path*',
     // Apply to staff routes
     '/staff/:path*',
+    // Apply to dashboard routes
+    '/dashboard/:path*',
     // Apply to public ordering routes
     '/r/:slug/t/:tableId/:path*',
   ],

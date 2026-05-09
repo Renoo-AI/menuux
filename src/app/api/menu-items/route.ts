@@ -22,7 +22,8 @@ function getAdminApp() {
 }
 
 // Fallback UID during migration
-const FALLBACK_SUPERADMIN_UID = process.env.NEXT_PUBLIC_SUPERADMIN_UID || '';
+// SECURITY: Uses server-only environment variable (no NEXT_PUBLIC_ prefix)
+const FALLBACK_SUPERADMIN_UID = process.env.SUPERADMIN_UID || '';
 
 async function verifyAuth(request: NextRequest): Promise<{ uid: string; isSuperadmin: boolean } | null> {
   const authHeader = request.headers.get('authorization');

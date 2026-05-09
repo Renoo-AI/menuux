@@ -20,7 +20,8 @@ function getAdminApp() {
   });
 }
 
-const SUPERADMIN_UID = process.env.NEXT_PUBLIC_SUPERADMIN_UID || '';
+// SECURITY: Uses server-only environment variable (no NEXT_PUBLIC_ prefix)
+const SUPERADMIN_UID = process.env.SUPERADMIN_UID || '';
 
 async function verifyAuth(request: NextRequest): Promise<{ uid: string } | null> {
   const authHeader = request.headers.get('authorization');

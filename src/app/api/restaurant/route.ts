@@ -42,7 +42,8 @@ async function verifyAuth(request: NextRequest): Promise<{ uid: string; email: s
     const decoded = await auth.verifyIdToken(token);
     
     // Check for superadmin via custom claim or fallback UID
-    const FALLBACK_UID = process.env.NEXT_PUBLIC_SUPERADMIN_UID || '';
+    // SECURITY: Fallback uses server-only env var (no NEXT_PUBLIC_ prefix)
+    const FALLBACK_UID = process.env.SUPERADMIN_UID || '';
     const isSuperadmin = decoded.role === 'superadmin' || decoded.uid === FALLBACK_UID;
     
     return { 

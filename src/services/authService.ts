@@ -1,4 +1,4 @@
-import { auth, db, SUPERADMIN_UID } from '@/lib/firebase';
+import { auth, db, isSuperadminFromClaims } from '@/lib/firebase';
 import { 
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
@@ -54,7 +54,9 @@ export async function signIn(email: string, password: string): Promise<AuthUser 
   const userCredential = await signInWithEmailAndPassword(auth, email, password);
   const user = userCredential.user;
   
-  const isSuperadmin = user.uid === SUPERADMIN_UID;
+  // Get superadmin status from custom claims
+  const tokenResult = await user.getIdTokenResult();
+  const isSuperadmin = isSuperadminFromClaims(tokenResult);
   const staffProfile = await getStaffProfile(user.uid);
   
   return {
@@ -81,7 +83,9 @@ export function subscribeToAuthState(
       return;
     }
     
-    const isSuperadmin = user.uid === SUPERADMIN_UID;
+    // Get superadmin status from custom claims
+    const tokenResult = await user.getIdTokenResult();
+    const isSuperadmin = isSuperadminFromClaims(tokenResult);
     const staffProfile = await getStaffProfile(user.uid);
     
     callback({

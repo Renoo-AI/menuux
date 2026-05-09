@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import type { Staff, UserRole } from '@/types';
-import { SUPERADMIN_UID } from '@/lib/firebase';
 
 export interface AuthUser {
   uid: string;
@@ -60,7 +59,8 @@ export const useCanAccessOwnerFeatures = (): boolean => {
   return user.isSuperadmin || user.role === 'owner' || user.role === 'admin';
 };
 
-// Check if UID is superadmin
-export const checkIsSuperadmin = (uid: string | undefined | null): boolean => {
-  return uid === SUPERADMIN_UID;
+// Check if UID is superadmin - Note: Superadmin status is determined by custom claims
+// This function checks the user's isSuperadmin property which is set from claims
+export const checkIsSuperadmin = (user: AuthUser | null): boolean => {
+  return user?.isSuperadmin ?? false;
 };

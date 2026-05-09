@@ -11,6 +11,8 @@
  * 
  * Or with Firebase emulator:
  *   FIRESTORE_EMULATOR_HOST=localhost:8080 bun run scripts/seedDemoData.ts
+ * 
+ * SECURITY: This script is blocked in production to prevent data corruption.
  */
 
 import { initializeApp } from 'firebase/app';
@@ -22,6 +24,22 @@ import {
   Timestamp,
   connectFirestoreEmulator
 } from 'firebase/firestore';
+
+// SECURITY: Prevent running in production
+if (process.env.NODE_ENV === 'production' && !process.env.FIRESTORE_EMULATOR_HOST) {
+  console.error('❌ SECURITY ERROR: This script cannot be run in production!');
+  console.error('   To run in production, you must use the Firebase emulator.');
+  console.error('   Set FIRESTORE_EMULATOR_HOST environment variable.');
+  process.exit(1);
+}
+
+// Additional safety check - require explicit confirmation in non-development environments
+if (process.env.NODE_ENV !== 'development' && !process.env.FIRESTORE_EMULATOR_HOST) {
+  console.warn('⚠️  WARNING: Running outside development environment.');
+  console.warn('   This script will modify live database data!');
+  console.warn('   Set NODE_ENV=development or use Firebase emulator.');
+  process.exit(1);
+}
 
 // Firebase configuration
 const firebaseConfig = {

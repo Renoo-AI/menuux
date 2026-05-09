@@ -68,34 +68,14 @@ export const initAnalytics = async () => {
   return null;
 };
 
-// SECURITY: SuperAdmin UID must be set via environment variable
-// No hardcoded fallback - this prevents unauthorized access if env var is missing
-const SUPERADMIN_UID_ENV = process.env.NEXT_PUBLIC_SUPERADMIN_UID;
-
-if (!SUPERADMIN_UID_ENV && typeof window !== 'undefined') {
-  console.error('SECURITY ERROR: NEXT_PUBLIC_SUPERADMIN_UID environment variable is not set!');
-}
-
-export const SUPERADMIN_UID = SUPERADMIN_UID_ENV || '';
-
-// Helper function to check if user is superadmin by UID (fallback during migration)
-export const isSuperadminByUid = (uid: string | undefined | null): boolean => {
-  if (!SUPERADMIN_UID) {
-    console.error('SECURITY: SuperAdmin UID not configured - access denied by default');
-    return false;
-  }
-  return uid === SUPERADMIN_UID;
-};
-
 // Helper to check if user has superadmin custom claim
 // This should be called with the ID token result
+// IMPORTANT: This is the ONLY way to check superadmin status on the client
+// Never expose SUPERADMIN_UID on the client side
 export const isSuperadminFromClaims = (tokenResult: { claims: Record<string, unknown> } | null): boolean => {
   if (!tokenResult) return false;
   return tokenResult.claims?.role === 'superadmin';
 };
-
-// Legacy export - prefer isSuperadminFromClaims for new code
-export const isSuperadmin = isSuperadminByUid;
 
 // Validate config on module load (server-side only)
 if (typeof window === 'undefined') {
