@@ -12,14 +12,9 @@ import {
   RefreshCw 
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { restaurantService } from '@/services/restaurantService';
-import { tableService } from '@/services/tableService';
-import { orderService } from '@/services/orderService';
 import { OrderStatusTimeline } from '@/components/order/OrderStatusTimeline';
 import { CallWaiterSheet } from '@/components/order/CallWaiterSheet';
 import { RequestBillSheet } from '@/components/order/RequestBillSheet';
-import { Watermark, WatermarkSpacer } from '@/components/Watermark';
-import type { Restaurant, Table, Order, OrderStatus } from '@/types';
 
 const UI_STRINGS = {
   fr: {

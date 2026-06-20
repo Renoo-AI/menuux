@@ -6,17 +6,13 @@ import Image from 'next/image';
 import { useParams, useRouter } from 'next/navigation';
 import { Plus, Minus, ArrowLeft, Loader2, AlertTriangle, Coffee } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { restaurantService } from '@/services/restaurantService';
-import { tableService } from '@/services/tableService';
 import { useCartStore } from '@/stores/cartStore';
-import { Watermark, WatermarkSpacer } from '@/components/Watermark';
-import type { Restaurant, Table } from '@/types';
 
 export default function OrderReviewPage({ params }: { params: Promise<{ slug: string; tableId: string }> }) {
   const resolvedParams = use(params);
   const router = useRouter();
-  const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
-  const [table, setTable] = useState<Table | null>(null);
+  const [restaurant, setRestaurant] = useState<{ id: string; slug: string; name: string; currency: string } | null>(null);
+  const [table, setTable] = useState<{ id: string; name: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,28 +32,15 @@ export default function OrderReviewPage({ params }: { params: Promise<{ slug: st
     async function loadData() {
       try {
         setLoading(true);
-        
-        const restaurantData = await restaurantService.getBySlug(resolvedParams.slug);
-        if (!restaurantData) {
-          setError('Restaurant not found');
-          return;
+        const res = await fetch(`/api/public/restaurant/${resolvedParams.slug}`);
+        if (res.ok) {
+          const data = await res.json();
+          setRestaurant({ id: data.restaurant.id, slug: data.restaurant.slug, name: data.restaurant.name, currency: data.restaurant.currency || 'TND' });
         }
-        setRestaurant(restaurantData);
-        
-        const tableData = await tableService.getTableByName(restaurantData.id, resolvedParams.tableId);
-        if (!tableData) {
-          setError('Table not found');
-          return;
-        }
-        setTable(tableData);
-      } catch (err) {
-        console.error('Error loading data:', err);
-        setError('Failed to load page');
-      } finally {
-        setLoading(false);
-      }
+        setTable({ id: 'demo-table', name: resolvedParams.tableId });
+      } catch { setError('Failed to load'); }
+      finally { setLoading(false); }
     }
-    
     loadData();
   }, [resolvedParams.slug, resolvedParams.tableId]);
 
