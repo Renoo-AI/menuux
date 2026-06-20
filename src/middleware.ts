@@ -33,14 +33,16 @@ const RATE_LIMITS = {
 
 /**
  * Check for authentication session
- * Since Firebase tokens can't be verified in Edge runtime, we check for session cookie presence
+ * Since Supabase sessions can't be verified directly in Edge runtime without database access, we check for session cookie presence
  * Actual token verification happens server-side in the page/API route
  */
 function hasAuthSession(request: NextRequest, cookieName: string): boolean {
+  const cookies = request.cookies.getAll();
+  const hasSupabaseCookie = cookies.some(c => c.name.startsWith('sb-'));
   const sessionCookie = request.cookies.get(cookieName);
   // Also check Authorization header for API requests
   const authHeader = request.headers.get('Authorization');
-  return !!(sessionCookie?.value || (authHeader && authHeader.startsWith('Bearer ')));
+  return !!(hasSupabaseCookie || sessionCookie?.value || (authHeader && authHeader.startsWith('Bearer ')));
 }
 
 function getRateLimitKey(request: NextRequest, type: keyof typeof RATE_LIMITS): string {
@@ -111,12 +113,8 @@ export async function middleware(request: NextRequest) {
       const hasSession = hasAuthSession(request, config.sessionCookie);
       
       if (!hasSession) {
-        // For admin routes, also check for Firebase ID token in localStorage (via cookie)
-        // Since Firebase stores tokens in memory/localStorage, we set a session cookie on login
-        const idTokenCookie = request.cookies.get('firebase-id-token');
         const staffSessionCookie = request.cookies.get('staff-session-token');
-        
-        const hasAnyAuth = !!(idTokenCookie?.value || staffSessionCookie?.value);
+        const hasAnyAuth = !!staffSessionCookie?.value;
         
         if (!hasAnyAuth) {
           // No session found - redirect to login

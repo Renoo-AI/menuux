@@ -15,6 +15,8 @@ import { Button } from '@/components/ui/button';
 import { OrderStatusTimeline } from '@/components/order/OrderStatusTimeline';
 import { CallWaiterSheet } from '@/components/order/CallWaiterSheet';
 import { RequestBillSheet } from '@/components/order/RequestBillSheet';
+import { supabase } from '@/lib/supabase/browser';
+import { Restaurant, Table, Order } from '@/types';
 
 const UI_STRINGS = {
   fr: {
@@ -49,12 +51,71 @@ const UI_STRINGS = {
     estimatedTime: 'الوقت المتوقع',
     mins: 'دقيقة',
     orderSummary: 'ملخص الطلب',
-    thankYou: 'شكراً لزيارتكم!',
     toggleLang: 'Français',
     orderNotFound: 'الطلب غير موجود',
     orderConfirmed: 'تم تأكيد طلبك',
     awaitingPayment: 'في انتظار الدفع',
   }
+};
+
+const mapDbOrderToOrder = (o: any): Order => {
+  return {
+    id: o.id,
+    restaurantId: o.restaurant_id,
+    tableId: o.table_id,
+    tableName: o.table_label,
+    items: Array.isArray(o.items) ? o.items.map((item: any) => ({
+      itemId: item.itemId || item.id || '',
+      name: item.nameFr || item.name || '',
+      quantity: parseInt(String(item.quantity || 1)),
+      price: parseFloat(String(item.price || 0)),
+      unitPrice: parseFloat(String(item.unitPrice || item.price || 0)),
+      notes: item.note || '',
+    })) : [],
+    subtotal: parseFloat(String(o.subtotal || 0)),
+    totalAmount: parseFloat(String(o.total || 0)),
+    status: o.status,
+    customerNote: o.customer_note || '',
+    rejectReason: o.reject_reason || '',
+    cancelReason: o.cancellation_reason || '',
+    createdAt: new Date(o.created_at),
+    updatedAt: new Date(o.updated_at),
+    acceptedAt: o.accepted_at ? new Date(o.accepted_at) : undefined,
+    paidAt: o.paid_at ? new Date(o.paid_at) : undefined,
+    closedAt: o.closed_at ? new Date(o.closed_at) : undefined,
+    cancelledAt: o.cancelled_at ? new Date(o.cancelled_at) : undefined,
+  };
+};
+
+const mapDbTableToTable = (t: any): Table => {
+  return {
+    id: t.id,
+    restaurantId: t.restaurant_id,
+    name: t.label, // UI uses table.name for the table label!
+    seats: t.seats || 2,
+    status: t.status,
+    qrCodeUrl: t.qr_token || '',
+    createdAt: new Date(t.created_at),
+    updatedAt: new Date(t.updated_at),
+  };
+};
+
+const mapDbRestaurantToRestaurant = (r: any): Restaurant => {
+  return {
+    id: r.id,
+    slug: r.slug,
+    name: r.name,
+    status: r.status,
+    currency: r.currency || 'TND',
+    phone: r.phone || '',
+    email: r.email || '',
+    plan: r.plan || 'FREE',
+    slugType: r.slug_type || 'FREE_RANDOM',
+    watermarkEnabled: r.watermark_enabled ?? true,
+    maxMenuItems: r.max_menu_items || 50,
+    createdAt: new Date(r.created_at),
+    updatedAt: new Date(r.updated_at),
+  };
 };
 
 export default function OrderSentPage({ params }: { params: Promise<{ slug: string; tableId: string }> }) {
@@ -82,18 +143,41 @@ export default function OrderSentPage({ params }: { params: Promise<{ slug: stri
       try {
         setLoading(true);
         
-        const restaurantData = await restaurantService.getBySlug(resolvedParams.slug);
-        if (restaurantData) {
-          setRestaurant(restaurantData);
-          
-          const tableData = await tableService.getTableByName(restaurantData.id, resolvedParams.tableId);
-          if (tableData) {
-            setTable(tableData);
-          }
-          
-          if (orderId) {
-            const orderData = await orderService.getOrderById(orderId);
-            setOrder(orderData);
+        // 1. Fetch table by UUID
+        const { data: tableData, error: tableError } = await supabase
+          .from('tables')
+          .select('*')
+          .eq('id', resolvedParams.tableId)
+          .single();
+
+        if (tableError || !tableData) {
+          console.error('Table error:', tableError);
+          setLoading(false);
+          return;
+        }
+        setTable(mapDbTableToTable(tableData));
+
+        // 2. Fetch restaurant
+        const { data: restData } = await supabase
+          .from('restaurants')
+          .select('*')
+          .eq('id', tableData.restaurant_id)
+          .single();
+
+        if (restData) {
+          setRestaurant(mapDbRestaurantToRestaurant(restData));
+        }
+
+        // 3. Fetch order by orderId
+        if (orderId) {
+          const { data: orderData, error: orderError } = await supabase
+            .from('orders')
+            .select('*')
+            .eq('id', orderId)
+            .single();
+
+          if (!orderError && orderData) {
+            setOrder(mapDbOrderToOrder(orderData));
           }
         }
       } catch (err) {
@@ -110,14 +194,27 @@ export default function OrderSentPage({ params }: { params: Promise<{ slug: stri
   useEffect(() => {
     if (!orderId) return;
     
-    const unsubscribe = orderService.subscribeToOrder(
-      orderId,
-      (updatedOrder) => {
-        setOrder(updatedOrder);
-      }
-    );
+    const channel = supabase
+      .channel(`order-updates-${orderId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'orders',
+          filter: `id=eq.${orderId}`,
+        },
+        (payload) => {
+          if (payload.new) {
+            setOrder(mapDbOrderToOrder(payload.new));
+          }
+        }
+      )
+      .subscribe();
     
-    return () => unsubscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [orderId]);
 
   // Load last waiter call time from localStorage
@@ -142,8 +239,15 @@ export default function OrderSentPage({ params }: { params: Promise<{ slug: stri
     
     setRefreshing(true);
     try {
-      const orderData = await orderService.getOrderById(orderId);
-      setOrder(orderData);
+      const { data: orderData } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('id', orderId)
+        .single();
+
+      if (orderData) {
+        setOrder(mapDbOrderToOrder(orderData));
+      }
     } catch (err) {
       console.error('Error refreshing order:', err);
     } finally {
@@ -160,16 +264,38 @@ export default function OrderSentPage({ params }: { params: Promise<{ slug: stri
     localStorage.setItem(`waiter_call_${table.id}`, now.toString());
     setLastWaiterCall(now);
     
-    // TODO: Implement actual API call to create TableRequest
-    console.log('Calling waiter for table:', table.name);
+    const { error } = await supabase
+      .from('table_requests')
+      .insert({
+        restaurant_id: restaurant.id,
+        table_id: table.id,
+        table_label: table.name,
+        type: 'CALL_WAITER',
+        status: 'PENDING'
+      });
+
+    if (error) {
+      console.error('Error calling waiter:', error);
+    }
   }, [restaurant, table]);
 
   // Request bill handler
   const handleRequestBill = useCallback(async () => {
     if (!restaurant || !table || !order) throw new Error('Missing context');
     
-    // TODO: Implement actual API call to create TableRequest
-    console.log('Requesting bill for table:', table.name, 'order:', order.id);
+    const { error } = await supabase
+      .from('table_requests')
+      .insert({
+        restaurant_id: restaurant.id,
+        table_id: table.id,
+        table_label: table.name,
+        type: 'REQUEST_BILL',
+        status: 'PENDING'
+      });
+
+    if (error) {
+      console.error('Error requesting bill:', error);
+    }
   }, [restaurant, table, order]);
 
   // Can request bill only after order is accepted/served
@@ -344,7 +470,7 @@ export default function OrderSentPage({ params }: { params: Promise<{ slug: stri
 
           {/* Back to Menu */}
           <Link
-            href={`/r/${restaurant?.slug || ''}/t/${table?.name || ''}`}
+            href={`/r/${resolvedParams.slug}/t/${resolvedParams.tableId}`}
             className="flex items-center justify-center gap-2 mt-6 text-[#D4A373] hover:text-[#3D2C1E] transition-colors font-semibold"
           >
             <ArrowLeft className={`w-4 h-4 ${isRTL ? 'rotate-180' : ''}`} />
@@ -374,7 +500,6 @@ export default function OrderSentPage({ params }: { params: Promise<{ slug: stri
             font-family: 'Playfair Display', serif;
           }
         `}</style>
-      </div>
 
       {/* Sheets */}
       <CallWaiterSheet

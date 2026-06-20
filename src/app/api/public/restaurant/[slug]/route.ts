@@ -41,6 +41,8 @@ export async function GET(
         slug: restaurant.slug,
         name: restaurant.name,
         currency: restaurant.currency || 'TND',
+        plan: restaurant.plan || 'FREE',
+        phone: restaurant.phone || '',
       },
       categories: categories || [],
       items: (items || []).map((item: Record<string, unknown>) => ({

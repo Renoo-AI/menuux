@@ -44,8 +44,28 @@ export default function CashierPage() {
     if (!restaurantId) { setIsLoading(false); return; }
     setIsLoading(true);
     fetchOrders(restaurantId);
-    const interval = setInterval(() => fetchOrders(restaurantId), 5000);
-    return () => clearInterval(interval);
+
+    // Subscribe to realtime updates on orders table for this restaurant
+    const channel = supabase
+      .channel(`restaurant-orders-cashier:${restaurantId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'orders',
+          filter: `restaurant_id=eq.${restaurantId}`,
+        },
+        (payload) => {
+          console.log('[Cashier Realtime] Order change detected:', payload);
+          fetchOrders(restaurantId);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [session?.restaurantId]);
 
   useEffect(() => {
@@ -59,8 +79,23 @@ export default function CashierPage() {
   }, [orders, playSound]);
 
   async function fetchOrders(restaurantId: string) {
-    const res = await fetch(`/api/public/restaurant?restaurantId=${restaurantId}`);
-    setIsLoading(false);
+    try {
+      const res = await fetch(`/api/public/orders?restaurantId=${restaurantId}`);
+      if (res.ok) {
+        const data = await res.json();
+        const parsedOrders = (data.orders || []).map((o: any) => ({
+          ...o,
+          createdAt: new Date(o.createdAt),
+        }));
+        setOrders(parsedOrders);
+      } else {
+        console.error('Failed to fetch orders, status:', res.status);
+      }
+    } catch (err) {
+      console.error('Error fetching orders:', err);
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   async function apiAction(orderId: string, status: string, reason?: string) {

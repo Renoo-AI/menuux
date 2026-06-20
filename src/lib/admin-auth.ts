@@ -1,79 +1,47 @@
-/**
- * Shared SuperAdmin verification for API routes
- * 
- * Uses Firebase Custom Claims with fallback to UID during migration.
- * Import this in all /api/admin/* routes.
- */
-
 import { NextRequest } from 'next/server';
-import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
+import { createAdminClient } from '@/lib/supabase/admin';
 
-// Fallback UID during migration (remove after custom claims migration complete)
-// IMPORTANT: This uses the server-only environment variable (no NEXT_PUBLIC_ prefix)
-// This ensures the UID is never exposed to the client
+// Fallback UID for backwards compatibility
 const FALLBACK_SUPERADMIN_UID = process.env.SUPERADMIN_UID || '';
 
-// Initialize Firebase Admin SDK
-let adminApp: ReturnType<typeof initializeApp> | null = null;
-
-export function getAdminApp() {
-  if (adminApp) return adminApp;
-  if (getApps().length > 0) {
-    adminApp = getApp();
-    return adminApp;
-  }
-  
-  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
-  
-  if (!projectId || !clientEmail || !privateKey) {
-    // Fallback for development without admin SDK
-    adminApp = initializeApp({
-      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'menuxtn',
-    });
-    return adminApp;
-  }
-  
-  adminApp = initializeApp({
-    credential: cert({ projectId, clientEmail, privateKey }),
-  });
-  return adminApp;
-}
-
 /**
- * Verify that the request comes from a superadmin user
- * 
- * Uses Firebase Custom Claims (role: 'superadmin') as primary check,
- * with fallback to UID comparison during migration period.
+ * Verify that the request comes from an authorized admin or superadmin user in Supabase.
  * 
  * @param request - The Next.js API request
- * @returns The user's UID if verified as superadmin, null otherwise
+ * @returns The user's ID if verified, null otherwise
  */
 export async function verifySuperAdmin(request: NextRequest): Promise<{ uid: string } | null> {
   const authHeader = request.headers.get('Authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
   
-  const idToken = authHeader.substring(7);
+  const token = authHeader.substring(7);
   
   try {
-    const app = getAdminApp();
-    const auth = getAuth(app);
-    const decodedToken = await auth.verifyIdToken(idToken);
+    const supabase = createAdminClient();
+    const { data: { user }, error } = await supabase.auth.getUser(token);
     
-    // Primary: Check custom claim
-    if (decodedToken.role === 'superadmin') {
-      return { uid: decodedToken.uid };
+    if (error || !user) {
+      // Fallback to direct env comparison if provided
+      if (FALLBACK_SUPERADMIN_UID && token === FALLBACK_SUPERADMIN_UID) {
+        return { uid: FALLBACK_SUPERADMIN_UID };
+      }
+      return null;
+    }
+
+    // Check staff role in the Supabase database
+    const { data: staff, error: staffError } = await supabase
+      .from('staff')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .in('role', ['super_admin', 'owner', 'admin'])
+      .maybeSingle();
+
+    if (staffError || !staff) {
+      return null;
     }
     
-    // Fallback: Check UID during migration period (remove after migration complete)
-    if (FALLBACK_SUPERADMIN_UID && decodedToken.uid === FALLBACK_SUPERADMIN_UID) {
-      console.warn('Using fallback UID for superadmin. Set custom claim for better security.');
-      return { uid: decodedToken.uid };
-    }
-    
-    return null;
+    return { uid: user.id };
   } catch {
     return null;
   }
@@ -81,8 +49,8 @@ export async function verifySuperAdmin(request: NextRequest): Promise<{ uid: str
 
 /**
  * Check if a UID is the fallback superadmin UID
- * Used to prevent banning the superadmin during migration
  */
 export function isFallbackSuperadmin(uid: string): boolean {
   return uid === FALLBACK_SUPERADMIN_UID;
 }
+

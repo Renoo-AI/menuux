@@ -7,11 +7,12 @@ import { useParams, useRouter } from 'next/navigation';
 import { Plus, Minus, ArrowLeft, Loader2, AlertTriangle, Coffee } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCartStore } from '@/stores/cartStore';
+import { supabase } from '@/lib/supabase/browser';
 
 export default function OrderReviewPage({ params }: { params: Promise<{ slug: string; tableId: string }> }) {
   const resolvedParams = use(params);
   const router = useRouter();
-  const [restaurant, setRestaurant] = useState<{ id: string; slug: string; name: string; currency: string } | null>(null);
+  const [restaurant, setRestaurant] = useState<{ id: string; slug: string; name: string; currency: string; plan: string; phone: string } | null>(null);
   const [table, setTable] = useState<{ id: string; name: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -32,14 +33,64 @@ export default function OrderReviewPage({ params }: { params: Promise<{ slug: st
     async function loadData() {
       try {
         setLoading(true);
-        const res = await fetch(`/api/public/restaurant/${resolvedParams.slug}`);
-        if (res.ok) {
-          const data = await res.json();
-          setRestaurant({ id: data.restaurant.id, slug: data.restaurant.slug, name: data.restaurant.name, currency: data.restaurant.currency || 'TND' });
+        setError(null);
+
+        // 1. Fetch table details by UUID
+        const { data: tableData, error: tableError } = await supabase
+          .from('tables')
+          .select('id, label, is_active, ordering_enabled, restaurant_id')
+          .eq('id', resolvedParams.tableId)
+          .single();
+
+        if (tableError || !tableData) {
+          setError('Table non disponible ou inexistante.');
+          setLoading(false);
+          return;
         }
-        setTable({ id: 'demo-table', name: resolvedParams.tableId });
-      } catch { setError('Failed to load'); }
-      finally { setLoading(false); }
+
+        if (!tableData.is_active || !tableData.ordering_enabled) {
+          setError('Table non disponible pour la commande.');
+          setLoading(false);
+          return;
+        }
+
+        // 2. Fetch restaurant details
+        const res = await fetch(`/api/public/restaurant/${resolvedParams.slug}`);
+        if (!res.ok) {
+          setError('Restaurant non trouvé.');
+          setLoading(false);
+          return;
+        }
+
+        const data = await res.json();
+        const { restaurant: rest } = data;
+
+        // Verify table belongs to restaurant
+        if (tableData.restaurant_id !== rest.id) {
+          setError("Cette table n'appartient pas à ce restaurant.");
+          setLoading(false);
+          return;
+        }
+
+        setRestaurant({ 
+          id: rest.id, 
+          slug: rest.slug, 
+          name: rest.name, 
+          currency: rest.currency || 'TND',
+          plan: rest.plan || 'FREE',
+          phone: rest.phone || '',
+        });
+
+        setTable({ 
+          id: tableData.id, 
+          name: tableData.label 
+        });
+      } catch (err) {
+        console.error('Error loading checkout review data:', err);
+        setError('Failed to load table and restaurant verification details.');
+      } finally {
+        setLoading(false);
+      }
     }
     loadData();
   }, [resolvedParams.slug, resolvedParams.tableId]);
@@ -61,6 +112,33 @@ export default function OrderReviewPage({ params }: { params: Promise<{ slug: st
     
     setSubmitting(true);
     setError(null);
+    
+    // If Lite/Free tier, redirect to WhatsApp
+    if (restaurant.plan === 'FREE') {
+      try {
+        const phone = restaurant.phone || '21656110674';
+        const formattedPhone = phone.replace(/[^0-9]/g, '');
+        
+        let message = `Bonjour ${restaurant.name}!\n`;
+        message += `Je souhaite passer une commande depuis la *Table ${table.name}*:\n\n`;
+        items.forEach(item => {
+          message += `- *${item.quantity}x* ${item.name} (${(item.price * item.quantity).toFixed(3)} ${currencySymbol})\n`;
+        });
+        message += `\n*Total:* ${cartTotal.toFixed(3)} ${currencySymbol}`;
+        
+        const encodedMessage = encodeURIComponent(message);
+        const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodedMessage}`;
+        
+        // Clear cart and redirect
+        clearCart();
+        window.location.href = whatsappUrl;
+      } catch (err) {
+        setError('Failed to generate WhatsApp order link.');
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
     
     try {
       // Use the updated createOrder with table name
@@ -87,7 +165,7 @@ export default function OrderReviewPage({ params }: { params: Promise<{ slug: st
       if (result.ok) {
         const data = await result.json();
         clearCart();
-        router.push(`/r/${restaurant.slug}/t/${table.name}/sent?orderId=${data.orderId}`);
+        router.push(`/r/${restaurant.slug}/t/${resolvedParams.tableId}/sent?orderId=${data.orderId}`);
       } else {
         const err = await result.json();
         setError(err.error || 'Failed to submit order');
@@ -131,7 +209,7 @@ export default function OrderReviewPage({ params }: { params: Promise<{ slug: st
       <header className="flex justify-between items-center px-6 py-4 sticky top-0 bg-[#FDF8F3] border-b border-[#E8E2DA] shadow-[0px_10px_30px_rgba(58,50,45,0.05)] z-40">
         <div className="flex items-center gap-4">
           <Link 
-            href={`/r/${restaurant?.slug}/t/${table?.name}`}
+            href={`/r/${resolvedParams.slug}/t/${resolvedParams.tableId}`}
             className="p-2 hover:bg-white rounded-full transition-colors"
           >
             <ArrowLeft className="w-6 h-6 text-[#3D2C1E]" />
@@ -152,7 +230,7 @@ export default function OrderReviewPage({ params }: { params: Promise<{ slug: st
             <p className="text-lg font-bold text-[#3D2C1E] mb-2" style={{ fontFamily: "'Playfair Display', serif" }}>Your cart is empty</p>
             <p className="text-sm mb-6">Add items from the menu to get started</p>
             <Button asChild>
-              <Link href={`/r/${restaurant?.slug}/t/${table?.name}`}>Browse Menu</Link>
+              <Link href={`/r/${resolvedParams.slug}/t/${resolvedParams.tableId}`}>Browse Menu</Link>
             </Button>
           </div>
         ) : (
@@ -238,10 +316,12 @@ export default function OrderReviewPage({ params }: { params: Promise<{ slug: st
             {submitting ? (
               <>
                 <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                Sending Order...
+                {restaurant?.plan === 'FREE' ? 'Redirecting to WhatsApp...' : 'Sending Order...'}
               </>
             ) : (
-              `Send Order \u2022 ${cartTotal.toFixed(3)} ${currencySymbol}`
+              restaurant?.plan === 'FREE' 
+                ? `Order via WhatsApp \u2022 ${cartTotal.toFixed(3)} ${currencySymbol}`
+                : `Send Order \u2022 ${cartTotal.toFixed(3)} ${currencySymbol}`
             )}
           </Button>
         </div>

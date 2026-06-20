@@ -9,6 +9,7 @@ interface StaffProfile {
   userId: string;
   restaurantId: string;
   restaurantName: string;
+  restaurantSlug: string;
   displayName: string;
   role: 'owner' | 'manager' | 'cashier' | 'super_admin' | 'admin';
   isActive: boolean;
@@ -36,7 +37,7 @@ export function useAuth(requiredRole?: string) {
 
     const { data: staffData, error: staffError } = await supabase
       .from('staff')
-      .select('*, restaurants!inner(name)')
+      .select('*, restaurants!inner(name, slug)')
       .eq('user_id', session.user.id)
       .eq('is_active', true)
       .maybeSingle();
@@ -53,6 +54,7 @@ export function useAuth(requiredRole?: string) {
       userId: staffData.user_id,
       restaurantId: staffData.restaurant_id,
       restaurantName: (staffData.restaurants as Record<string, string>)?.name || '',
+      restaurantSlug: (staffData.restaurants as Record<string, string>)?.slug || '',
       displayName: staffData.display_name || '',
       role: staffData.role,
       isActive: staffData.is_active,

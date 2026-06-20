@@ -1,19 +1,17 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { onSnapshot, doc, FirestoreError } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { useState, useEffect } from 'react';
 
 interface NetworkStatus {
   isOnline: boolean;
-  isFirestoreConnected: boolean;
+  isDatabaseConnected: boolean;
   lastChecked: Date | null;
 }
 
 export function useNetworkStatus() {
   const [status, setStatus] = useState<NetworkStatus>({
     isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
-    isFirestoreConnected: true,
+    isDatabaseConnected: true,
     lastChecked: null,
   });
 
@@ -40,7 +38,7 @@ export function useNetworkStatus() {
   return status;
 }
 
-// Retry helper for Firestore operations
+// Retry helper for Database operations
 export async function withRetry<T>(
   operation: () => Promise<T>,
   maxRetries: number = 3,
@@ -55,11 +53,16 @@ export async function withRetry<T>(
       lastError = error as Error;
       
       // Check if it's a retryable error
-      const firebaseError = error as { code?: string };
+      const dbError = error as { code?: string; message?: string; status?: number };
       const isRetryable = 
-        firebaseError.code === 'unavailable' ||
-        firebaseError.code === 'deadline-exceeded' ||
-        firebaseError.code === 'resource-exhausted' ||
+        dbError.code === 'unavailable' ||
+        dbError.code === 'deadline-exceeded' ||
+        dbError.code === 'resource-exhausted' ||
+        dbError.status === 503 ||
+        dbError.status === 504 ||
+        dbError.message?.toLowerCase().includes('timeout') ||
+        dbError.message?.toLowerCase().includes('offline') ||
+        dbError.message?.toLowerCase().includes('network') ||
         (error as Error).message?.includes('offline');
       
       if (!isRetryable || attempt === maxRetries - 1) {
@@ -78,13 +81,13 @@ export async function withRetry<T>(
 export function isOfflineError(error: unknown): boolean {
   if (!error) return false;
   
-  const firebaseError = error as { code?: string; message?: string };
+  const dbError = error as { code?: string; message?: string };
   
   return (
-    firebaseError.code === 'unavailable' ||
-    firebaseError.code === 'failed-precondition' ||
-    firebaseError.message?.includes('offline') ||
-    firebaseError.message?.includes('network') ||
+    dbError.code === 'unavailable' ||
+    dbError.code === 'failed-precondition' ||
+    dbError.message?.toLowerCase().includes('offline') ||
+    dbError.message?.toLowerCase().includes('network') ||
     (typeof navigator !== 'undefined' && !navigator.onLine)
   );
 }

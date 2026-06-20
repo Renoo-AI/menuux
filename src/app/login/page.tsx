@@ -208,8 +208,8 @@ function LoginForm() {
       </div>
 
       {/* Right Side - Auth Form */}
-      <div className="flex-1 flex items-center justify-center p-6 md:p-12 bg-surface">
-        <div className="w-full max-w-md animate-fade-in">
+      <div className="flex-1 flex items-center justify-center p-6 md:p-12 bg-luxury-pattern">
+        <div className="w-full max-w-md animate-luxury-fade-in-up card-luxury card-luxury-glass p-8 md:p-10 border border-[#E8E2DA] shadow-xl">
           <div className="lg:hidden mb-12 text-center">
             <Link href="/" className="font-display text-3xl text-primary inline-flex items-center gap-3">
               <div className="w-12 h-12 bg-secondary-container rounded-xl flex items-center justify-center">
@@ -220,23 +220,23 @@ function LoginForm() {
           </div>
 
           <div className="mb-8">
-            <h2 className="font-display text-3xl text-primary mb-2">
+            <h2 className="font-display text-3xl text-primary mb-2 text-gradient-gold">
               {mode === 'login' ? 'Welcome back' : 'Create your account'}
             </h2>
-            <p className="text-on-surface-variant">
+            <p className="text-on-surface-variant text-sm">
               {mode === 'login' ? 'Sign in to access your dashboard' : 'Start your free digital menu today'}
             </p>
           </div>
 
-          <Button type="button" variant="outline" onClick={handleGoogleAuth} disabled={loading || googleLoading}
-            className="w-full py-4 rounded-xl font-semibold border-2 border-outline-variant hover:border-secondary hover:bg-secondary-fixed/10 transition-all duration-300 mb-6">
-            {googleLoading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Chrome className="w-5 h-5 mr-2" />}
+          <Button type="button" onClick={handleGoogleAuth} disabled={loading || googleLoading}
+            className="btn-luxury-outline w-full mb-6 font-semibold flex items-center justify-center gap-2">
+            {googleLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Chrome className="w-5 h-5" />}
             Continue with Google
           </Button>
 
           <div className="relative mb-6">
             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-outline-variant" /></div>
-            <div className="relative flex justify-center text-sm"><span className="px-4 bg-surface text-on-surface-variant">or</span></div>
+            <div className="relative flex justify-center text-sm"><span className="px-4 bg-white/80 rounded-md text-on-surface-variant">or</span></div>
           </div>
 
           <form onSubmit={mode === 'login' ? handleSignIn : handleSignUp} className="space-y-6">
@@ -252,7 +252,7 @@ function LoginForm() {
                 <Label htmlFor="name" className="font-label-caps text-xs text-on-surface-variant tracking-wider">RESTAURANT NAME</Label>
                 <Input id="name" type="text" value={name} onChange={(e) => setName(e.target.value)}
                   placeholder="Café Bella Vista" required
-                  className="w-full p-4 border border-outline-variant rounded-xl font-body bg-surface-container-low focus:border-secondary focus:ring-2 focus:ring-secondary/20 transition-all" />
+                  className="input-luxury" />
               </div>
             )}
 
@@ -260,7 +260,7 @@ function LoginForm() {
               <Label htmlFor="email" className="font-label-caps text-xs text-on-surface-variant tracking-wider">EMAIL ADDRESS</Label>
               <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                 placeholder="owner@restaurant.com" required
-                className="w-full p-4 border border-outline-variant rounded-xl font-body bg-surface-container-low focus:border-secondary focus:ring-2 focus:ring-secondary/20 transition-all" />
+                className="input-luxury" />
             </div>
 
             <div className="space-y-2">
@@ -271,7 +271,7 @@ function LoginForm() {
               <div className="relative">
                 <Input id="password" type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
                   placeholder={mode === 'signup' ? 'At least 6 characters' : 'Enter your password'} required
-                  className="w-full p-4 border border-outline-variant rounded-xl font-body bg-surface-container-low focus:border-secondary focus:ring-2 focus:ring-secondary/20 transition-all pr-12" />
+                  className="input-luxury pr-12" />
                 <button type="button" onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary transition-colors">
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
@@ -280,12 +280,12 @@ function LoginForm() {
             </div>
 
             <Button type="submit" disabled={loading || googleLoading}
-              className="w-full bg-primary text-on-primary py-4 rounded-xl font-semibold text-base hover:opacity-90 shadow-lg hover:shadow-xl transition-all duration-300 group">
+              className="btn-luxury w-full group shadow-md flex items-center justify-center gap-2">
               {loading ? (
-                <><Loader2 className="w-5 h-5 mr-2 animate-spin" />{mode === 'login' ? 'Signing in...' : 'Creating account...'}</>
+                <><Loader2 className="w-5 h-5 animate-spin" />{mode === 'login' ? 'Signing in...' : 'Creating...'}</>
               ) : (
-                <>{mode === 'login' ? (<><>Sign In<ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" /></></>)
-                  : (<><UserPlus className="w-5 h-5 mr-2" />Create Free Account</>)}</>
+                <>{mode === 'login' ? (<>Sign In <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" /></>)
+                  : (<><UserPlus className="w-5 h-5" /> Create Free Account</>)}</>
               )}
             </Button>
           </form>

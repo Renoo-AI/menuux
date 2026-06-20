@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase/browser';
+import { useAuth } from '@/lib/useAuth';
 
 interface TableData {
   id: string;
@@ -15,26 +16,35 @@ interface TableData {
   ordering_enabled: boolean;
 }
 
-const RESTAURANT_ID = process.env.NEXT_PUBLIC_RESTAURANT_ID || 'demo-restaurant';
 const BASE_URL = typeof window !== 'undefined' ? window.location.origin : '';
 
 export default function TablesPage() {
+  const { staff, loading: authLoading } = useAuth();
   const [tables, setTables] = useState<TableData[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [tablesLoading, setTablesLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ label: '', number: '0', zone: '', seats: '2' });
 
+  const loading = authLoading || tablesLoading;
+
   const loadTables = useCallback(async () => {
-    setLoading(true);
+    if (!staff?.restaurantId) return;
+    setTablesLoading(true);
     try {
-      const res = await fetch(`/api/tables?restaurantId=${RESTAURANT_ID}`);
+      const res = await fetch(`/api/tables?restaurantId=${staff.restaurantId}`);
       const data = await res.json();
       setTables(data.tables || []);
     } catch { /* empty */ }
-    setLoading(false);
-  }, []);
+    setTablesLoading(false);
+  }, [staff?.restaurantId]);
 
-  useEffect(() => { loadTables(); }, [loadTables]);
+  useEffect(() => {
+    if (staff?.restaurantId) {
+      loadTables();
+    } else if (!authLoading && !staff) {
+      setTablesLoading(false);
+    }
+  }, [staff, authLoading, loadTables]);
 
   const addTable = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,7 +52,7 @@ export default function TablesPage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        restaurantId: RESTAURANT_ID,
+        restaurantId: staff?.restaurantId || '',
         label: form.label,
         number: parseInt(form.number) || 0,
         zone: form.zone,
@@ -69,7 +79,7 @@ export default function TablesPage() {
     loadTables();
   };
 
-  const qrUrl = (token: string) => `${BASE_URL}/r/zcoffee/t/${token}`;
+  const qrUrl = (token: string) => `${BASE_URL}/r/${staff?.restaurantSlug || 'zcoffee'}/t/${token}`;
 
   return (
     <div className="min-h-screen bg-[#faf9f6]">

@@ -22,42 +22,43 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* TopNavBar */}
-      <nav className="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-8 md:px-16 py-4 bg-[#FDF8F3] border-b border-[#E8E2DA] shadow-[0px_10px_30px_rgba(58,50,45,0.05)]">
+      <nav className="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-8 md:px-16 py-4 glass shadow-sm">
         <div className="flex items-center gap-2">
-          <span className="font-display text-headline-md font-bold text-primary">Menux</span>
+          <span className="font-display text-headline-md font-bold text-gradient-gold">Menux</span>
+          <span className="text-[9px] font-bold tracking-widest bg-[#C9A07E]/10 text-[#C9A07E] px-2 py-0.5 rounded-md uppercase">PRO</span>
         </div>
-        <div className="hidden md:flex items-center gap-10">
-          <Link href="#features" className="text-primary font-semibold hover:text-primary/80 transition-colors pb-1">
+        <div className="hidden md:flex items-center gap-2 bg-[#FDF8F3]/60 p-1 rounded-full border border-[#E8E2DA]">
+          <Link href="#features" className="px-5 py-2 text-xs font-bold uppercase tracking-wider text-primary hover:text-[#C9A07E] transition-colors rounded-full">
             Découvrir
           </Link>
-          <Link href="/pricing" className="text-primary font-semibold hover:text-[#C9A07E] transition-colors pb-1">
+          <Link href="/pricing" className="px-5 py-2 text-xs font-bold uppercase tracking-wider text-primary hover:text-[#C9A07E] transition-colors rounded-full">
             Tarifs
           </Link>
         </div>
-        <Button asChild className="bg-primary text-on-primary hover:opacity-90">
+        <Button asChild className="btn-luxury">
           <Link href="/login">Voir une démo</Link>
         </Button>
       </nav>
 
       {/* Hero Section */}
-      <section className="w-full px-6 sm:px-8 lg:px-12 pt-40 pb-32 overflow-hidden">
+      <section className="w-full px-6 sm:px-8 lg:px-12 pt-44 pb-32 overflow-hidden bg-luxury-pattern">
         <div className="mx-auto w-full max-w-7xl">
           <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)] lg:gap-16">
             {/* Text Content */}
-            <div className="w-full min-w-0" style={{ maxWidth: '48rem' }}>
+            <div className="w-full min-w-0 animate-luxury-fade-in-up" style={{ maxWidth: '48rem' }}>
               <h1 className="font-display text-display-xl text-primary leading-tight" style={{ maxWidth: '56rem' }}>
                 Le menu digital <br/>
-                <span className="italic font-normal">nouvelle génération.</span>
+                <span className="italic font-normal text-gradient-gold">nouvelle génération.</span>
               </h1>
               <p className="mt-6 w-full whitespace-normal break-normal text-lg md:text-xl leading-8 text-on-surface-variant" style={{ maxWidth: '48rem', overflowWrap: 'normal' }}>
                 QR menus and table ordering designed for modern cafés and restaurants. 
                 L&apos;élégance du papier, la puissance du digital.
               </p>
               <div className="flex flex-wrap gap-4 mt-8">
-                <Button asChild size="lg" className="bg-primary text-on-primary luxury-shadow hover:opacity-90">
+                <Button asChild size="lg" className="btn-luxury shadow-lg">
                   <Link href="/login?signup=true">Get Started Free</Link>
                 </Button>
-                <Button asChild variant="outline" size="lg" className="border-outline hover:bg-surface-container-low">
+                <Button asChild size="lg" className="btn-luxury-outline shadow-sm">
                   <Link href="/r/demo">Voir une démo</Link>
                 </Button>
               </div>
@@ -257,7 +258,7 @@ export default function LandingPage() {
         
         <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
           {/* FREE Plan */}
-          <div className="bg-white p-8 rounded-lg border border-surface-container-high luxury-shadow flex flex-col h-full">
+          <div className="card-luxury p-8 flex flex-col h-full bg-white">
             <div className="flex justify-between items-start mb-6">
               <div>
                 <h3 className="font-display text-title-sm text-primary">FREE</h3>
@@ -281,13 +282,13 @@ export default function LandingPage() {
                 <span className="line-through">Sans filigrane</span>
               </li>
             </ul>
-            <Button asChild variant="outline" className="w-full rounded-full mt-auto">
+            <Button asChild className="btn-luxury-outline w-full mt-auto">
               <Link href="/login?signup=true">Commencer</Link>
             </Button>
           </div>
           
           {/* PRO Plan */}
-          <div className="bg-primary text-on-primary p-8 rounded-lg luxury-shadow flex flex-col h-full relative overflow-hidden">
+          <div className="card-luxury card-luxury-highlight p-8 flex flex-col h-full relative overflow-hidden bg-primary text-on-primary shadow-xl">
             <div className="absolute top-4 right-4 bg-secondary text-on-secondary text-[9px] px-3 py-1 rounded-full uppercase font-bold tracking-widest">
               Populaire
             </div>
@@ -318,13 +319,13 @@ export default function LandingPage() {
                 <span>Tableau de caisse direct</span>
               </li>
             </ul>
-            <Button asChild className="w-full bg-secondary text-white rounded-full hover:opacity-90 mt-auto">
+            <Button asChild className="btn-luxury w-full mt-auto shadow-md">
               <a href="https://wa.me/21656110674?text=Je%20voudrais%20le%20plan%20PRO%20MenuxPro">Activer PRO</a>
             </Button>
           </div>
 
           {/* MAX Plan */}
-          <div className="bg-white p-8 rounded-lg border border-surface-container-high luxury-shadow flex flex-col h-full">
+          <div className="card-luxury p-8 flex flex-col h-full bg-white">
             <div className="flex justify-between items-start mb-6">
               <div>
                 <h3 className="font-display text-title-sm text-primary">MAX</h3>
@@ -352,7 +353,7 @@ export default function LandingPage() {
                 <span>Support prioritaire WhatsApp</span>
               </li>
             </ul>
-            <Button asChild variant="outline" className="w-full rounded-full mt-auto">
+            <Button asChild className="btn-luxury-outline w-full mt-auto">
               <a href="mailto:contact@menuxpro.com?subject=Demande%20Plan%20MAX%20MenuxPro">Contacter</a>
             </Button>
           </div>

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/browser';
 import type { User } from '@supabase/supabase-js';
+import { useAuth } from '@/lib/useAuth';
 
 interface MenuItem {
   id: string;
@@ -50,34 +51,21 @@ const DEFAULT_MENU: Omit<FormData, 'id'>[] = [
 ];
 
 export default function DashboardPage() {
-  const [user, setUser] = useState<User | null>(null);
+  const { user, staff, loading: authLoading } = useAuth();
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [menuLoading, setMenuLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<FormData>({ id: '', category: '', categoryAr: '', nameFr: '', nameAr: '', price: '' });
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) loadMenu();
-      else setLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) loadMenu();
-      else setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+  const loading = authLoading || menuLoading;
 
   const loadMenu = useCallback(async () => {
-    setLoading(true);
+    if (!staff?.restaurantId) return;
+    setMenuLoading(true);
     try {
-      const res = await fetch(`/api/menu?restaurantId=${RESTAURANT_ID}`);
+      const res = await fetch(`/api/menu?restaurantId=${staff.restaurantId}`);
       const data = await res.json();
       if (data.items?.length) {
         setMenuItems(data.items.map((i: Record<string, unknown>) => ({
@@ -95,8 +83,16 @@ export default function DashboardPage() {
     } catch {
       setMenuItems([]);
     }
-    setLoading(false);
-  }, []);
+    setMenuLoading(false);
+  }, [staff?.restaurantId]);
+
+  useEffect(() => {
+    if (staff?.restaurantId) {
+      loadMenu();
+    } else if (!authLoading && !staff) {
+      setMenuLoading(false);
+    }
+  }, [staff, authLoading, loadMenu]);
 
   const openAddModal = () => {
     setForm({ id: '', category: '', categoryAr: '', nameFr: '', nameAr: '', price: '' });
@@ -115,7 +111,7 @@ export default function DashboardPage() {
     setSaving(true);
     try {
       const body: Record<string, string> = {
-        restaurantId: RESTAURANT_ID,
+        restaurantId: staff?.restaurantId || '',
         nameFr: form.nameFr,
         nameAr: form.nameAr,
         price: form.price,
@@ -165,7 +161,7 @@ export default function DashboardPage() {
       await fetch('/api/menu', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ restaurantId: RESTAURANT_ID, ...item }),
+        body: JSON.stringify({ restaurantId: staff?.restaurantId || '', ...item }),
       });
     }
     loadMenu();
@@ -226,13 +222,13 @@ export default function DashboardPage() {
             <span className="text-[#b48c68] font-bold text-lg">Z</span>
           </div>
           <div className="hidden sm:block">
-            <h1 className="text-sm font-bold uppercase tracking-widest text-[#2d2a26]">ZCOFFEE</h1>
+            <h1 className="text-sm font-bold uppercase tracking-widest text-[#2d2a26]">{staff?.restaurantName || 'ZCOFFEE'}</h1>
             <p className="text-[9px] text-[#b48c68] font-bold uppercase">{user.email}</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 md:gap-4">
-          <a href={`/r/zcoffee`} target="_blank" className="hidden md:flex items-center gap-2 px-5 py-2.5 rounded-xl border border-black/5 bg-white hover:bg-black hover:text-white transition-all text-xs font-bold uppercase tracking-widest">
+          <a href={`/r/${staff?.restaurantSlug || 'zcoffee'}`} target="_blank" className="hidden md:flex items-center gap-2 px-5 py-2.5 rounded-xl border border-black/5 bg-white hover:bg-black hover:text-white transition-all text-xs font-bold uppercase tracking-widest">
             <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
             </svg>
@@ -249,7 +245,7 @@ export default function DashboardPage() {
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
           <div>
             <h2 className="text-3xl md:text-5xl font-bold tracking-tight mb-2" style={{ fontFamily: "'Playfair Display', serif" }}>
-              Bonjour, Youssef
+              Bonjour, {staff?.displayName || 'Youssef'}
             </h2>
             <p className="text-sm text-[#b48c68] font-medium">Gérez votre menu et vos prix en temps réel.</p>
           </div>

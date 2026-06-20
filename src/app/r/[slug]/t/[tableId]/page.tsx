@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Plus, Minus, ChevronRight, AlertTriangle, Loader2, Coffee } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCartStore } from '@/stores/cartStore';
+import { supabase } from '@/lib/supabase/browser';
 
 interface MenuDisplayItem {
   id: string;
@@ -120,14 +121,31 @@ export default function TableOrderingPage({ params }: { params: Promise<{ slug: 
     async function loadData() {
       try {
         setLoading(true);
+        setError(null);
 
+        // 1. Fetch table details by UUID
+        const { data: tableData, error: tableError } = await supabase
+          .from('tables')
+          .select('id, label, is_active, ordering_enabled, restaurant_id')
+          .eq('id', resolvedParams.tableId)
+          .single();
+
+        if (tableError || !tableData) {
+          setError('Table non disponible ou inexistante.');
+          setLoading(false);
+          return;
+        }
+
+        if (!tableData.is_active || !tableData.ordering_enabled) {
+          setError('Table non disponible pour la commande.');
+          setLoading(false);
+          return;
+        }
+
+        // 2. Fetch restaurant configuration by slug
         const res = await fetch(`/api/public/restaurant/${resolvedParams.slug}`);
-        
         if (!res.ok) {
-          setMenuItems(DEMO_MENU_ITEMS);
-          setRestaurant({ id: 'demo', slug: resolvedParams.slug, name: 'ZCOFFEE', currency: 'TND' });
-          setTable({ id: 'demo-table', name: resolvedParams.tableId, restaurantId: 'demo' });
-          setContext('demo', resolvedParams.slug, 'demo-table');
+          setError('Restaurant non trouvé.');
           setLoading(false);
           return;
         }
@@ -135,9 +153,29 @@ export default function TableOrderingPage({ params }: { params: Promise<{ slug: 
         const data = await res.json();
         const { restaurant: rest, items: apiItems } = data;
 
-        setRestaurant({ id: rest.id, slug: rest.slug, name: rest.name, currency: rest.currency || 'TND' });
-        setTable({ id: 'demo-table', name: resolvedParams.tableId, restaurantId: rest.id });
-        setContext(rest.id, rest.slug, 'demo-table');
+        // Verify table belongs to this restaurant
+        if (tableData.restaurant_id !== rest.id) {
+          setError('Cette table n\'appartient pas à ce restaurant.');
+          setLoading(false);
+          return;
+        }
+
+        setRestaurant({ 
+          id: rest.id, 
+          slug: rest.slug, 
+          name: rest.name, 
+          currency: rest.currency || 'TND',
+          plan: rest.plan,
+          watermarkEnabled: rest.plan === 'FREE'
+        });
+
+        setTable({ 
+          id: tableData.id, 
+          name: tableData.label, 
+          restaurantId: rest.id 
+        });
+
+        setContext(rest.id, rest.slug, tableData.id);
 
         if (apiItems?.length) {
           const displayItems: MenuDisplayItem[] = apiItems.map((item: Record<string, unknown>) => ({
@@ -153,13 +191,11 @@ export default function TableOrderingPage({ params }: { params: Promise<{ slug: 
           }));
           setMenuItems(displayItems);
         } else {
-          setMenuItems(DEMO_MENU_ITEMS);
+          setMenuItems([]);
         }
-      } catch {
-        setMenuItems(DEMO_MENU_ITEMS);
-        setRestaurant({ id: 'demo', slug: resolvedParams.slug, name: 'ZCOFFEE', currency: 'TND' });
-        setTable({ id: 'demo-table', name: resolvedParams.tableId, restaurantId: 'demo' });
-        setContext('demo', resolvedParams.slug, 'demo-table');
+      } catch (err) {
+        console.error('Error loading table ordering data:', err);
+        setError('Erreur lors du chargement des données.');
       } finally {
         setLoading(false);
       }
@@ -469,5 +505,5 @@ export default function TableOrderingPage({ params }: { params: Promise<{ slug: 
           }
         `}</style>
       </div>
-    </div>
   );
+}

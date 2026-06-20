@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useAuth } from '@/lib/useAuth';
 
 interface MenuItem {
   id: string;
@@ -13,23 +14,31 @@ interface MenuItem {
   is_available: boolean;
 }
 
-const RESTAURANT_ID = process.env.NEXT_PUBLIC_RESTAURANT_ID || '';
-
 export default function MenuPage() {
+  const { staff, loading: authLoading } = useAuth();
   const [items, setItems] = useState<MenuItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [menuLoading, setMenuLoading] = useState(true);
+
+  const loading = authLoading || menuLoading;
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!staff?.restaurantId) return;
+    setMenuLoading(true);
     try {
-      const res = await fetch(`/api/menu?restaurantId=${RESTAURANT_ID}`);
+      const res = await fetch(`/api/menu?restaurantId=${staff.restaurantId}`);
       const data = await res.json();
       setItems(data.items || []);
     } catch { /* empty */ }
-    setLoading(false);
-  }, []);
+    setMenuLoading(false);
+  }, [staff?.restaurantId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (staff?.restaurantId) {
+      load();
+    } else if (!authLoading && !staff) {
+      setMenuLoading(false);
+    }
+  }, [staff, authLoading, load]);
 
   const grouped: Record<string, MenuItem[]> = {};
   items.forEach(item => {

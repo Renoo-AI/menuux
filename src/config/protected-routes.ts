@@ -17,14 +17,14 @@ export const PROTECTED_ROUTES: Record<string, ProtectedRouteConfig> = {
   admin: {
     paths: ['/admin'],
     loginPath: '/admin/login',
-    sessionCookie: 'firebase-auth-token',
+    sessionCookie: 'sb-access-token',
   },
   // Staff routes require staff authentication
   staff: {
     paths: ['/staff'],
     loginPath: '/staff/login',
     sessionCookie: 'staff-session',
-    excludePaths: ['/staff/login', '/staff/verify'],
+    excludePaths: ['/staff/login'],
   },
   // Dashboard routes require staff authentication with proper role
   dashboard: {
